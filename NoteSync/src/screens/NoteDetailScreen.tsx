@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   TextInput as RNTextInput,
   Platform,
+  Alert,
 } from "react-native";
 import { C } from "../constants/colors";
 import { delay, fmtDate, timeAgo, User } from "../utils/helpers";
@@ -78,6 +79,7 @@ const NotesTab: React.FC<NotesTabProps> = ({ note, user, navigate }) => {
       <View style={styles.badgeBar}>
         <Badge label={fmtDate(note.lectureDate)} color="gray" />
         <Badge label={`v${note.currentVersionNumber}`} color="accent" />
+        {version?.isPinned && <Badge label="Pinned" color="accent" />}
         {note.isLocked && <Badge label="Locked" color="gray" />}
         {note.pendingProposalCount > 0 && (
           <Badge
@@ -276,7 +278,17 @@ const ProposalsTab: React.FC<ProposalsTabProps> = ({ note, user }) => {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    delay(400).then(() => setProposals([...getProposalsForNote(note.id)]));
+    delay(400).then(() =>
+      setProposals(
+        [...getProposalsForNote(note.id)].sort((a, b) => {
+          if (b.upvoteCount !== a.upvoteCount)
+            return b.upvoteCount - a.upvoteCount;
+          return (
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+        }),
+      ),
+    );
   }, [note.id, getProposalsForNote, allProposals]);
 
   const showToast = (msg: string) => {
@@ -301,7 +313,7 @@ const ProposalsTab: React.FC<ProposalsTabProps> = ({ note, user }) => {
     );
   };
 
-  const handleApprove = async (id: string) => {
+  const handleApproveDirect = async (id: string) => {
     await delay(300);
     setProposalStatus(id, "approved");
     setProposals(
@@ -310,6 +322,17 @@ const ProposalsTab: React.FC<ProposalsTabProps> = ({ note, user }) => {
         null,
     );
     showToast("Proposal approved ✓");
+  };
+
+  const handleApprove = (id: string) => {
+    Alert.alert(
+      "Approve proposal?",
+      "Apply this proposal and mark as approved.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Approve", onPress: () => handleApproveDirect(id) },
+      ],
+    );
   };
 
   const handleReject = async () => {
@@ -372,25 +395,36 @@ const ProposalsTab: React.FC<ProposalsTabProps> = ({ note, user }) => {
         ) : (
           filtered.map((p) => (
             <View key={p.id} style={styles.proposalCard}>
-              <View style={styles.proposalHeader}>
-                <View>
-                  {p.isInline && (
-                    <Ionicons
-                      name="location-outline"
-                      size={14}
-                      color={C.textMuted}
-                      style={styles.inlineIndicator}
-                    />
-                  )}
-                  <Text style={styles.proposalAuthor}>{p.proposedBy}</Text>
-                  <Text style={styles.proposalTime}>
-                    {timeAgo(p.createdAt)}
-                  </Text>
+              <View style={styles.proposalHeaderRow}>
+                <Avatar name={p.proposedBy} size={36} />
+                <View style={styles.proposalAuthorBlock}>
+                  <View style={styles.proposalAuthorTop}>
+                    {p.isInline && (
+                      <Ionicons
+                        name="location-outline"
+                        size={14}
+                        color={C.textMuted}
+                        style={styles.inlineIndicator}
+                      />
+                    )}
+                    <Text style={styles.proposalAuthor}>{p.proposedBy}</Text>
+                    <Text style={styles.proposalTime}>
+                      {timeAgo(p.createdAt)}
+                    </Text>
+                  </View>
                 </View>
                 <View style={styles.proposalActions}>
                   <TouchableOpacity
                     onPress={() => handleUpvote(p.id)}
+                    onLongPress={() =>
+                      Alert.alert(
+                        "Upvote",
+                        "Tap to upvote this proposal. Upvotes help lecturers prioritise reviews.",
+                      )
+                    }
                     style={styles.upvoteBtn}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityLabel={`Upvote proposal by ${p.proposedBy}. ${p.upvoteCount} upvotes`}
                   >
                     <Ionicons
                       name={p.hasUpvoted ? "heart" : "heart-outline"}
@@ -980,6 +1014,19 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     marginBottom: 8,
   },
+  proposalHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  proposalAuthorBlock: {
+    flex: 1,
+  },
+  proposalAuthorTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   inlineIndicator: {
     fontSize: 12,
     marginRight: 6,
@@ -1116,8 +1163,11 @@ const styles = StyleSheet.create({
     borderColor: C.border,
   },
   lecturerComment: {
-    borderLeftWidth: 2,
+    borderLeftWidth: 4,
     borderLeftColor: C.accent,
+    backgroundColor: C.accentLight,
+    padding: 8,
+    borderRadius: 8,
   },
   commentHeader: {
     flexDirection: "row",

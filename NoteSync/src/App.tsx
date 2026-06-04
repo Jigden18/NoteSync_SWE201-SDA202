@@ -29,7 +29,10 @@ import { NotificationsScreen } from "./screens/NotificationsScreen";
 import { ProfileScreen } from "./screens/ProfileScreen";
 import { ProposalReviewQueueScreen } from "./screens/ProposalReviewQueueScreen";
 import { C } from "./constants/colors";
-import { registerForPushNotificationsAsync } from "./utils/pushNotifications";
+import {
+  canRegisterForRemotePushNotifications,
+  registerForPushNotificationsAsync,
+} from "./utils/pushNotifications";
 import { resolveNotificationRoute } from "./utils/notificationRouting";
 
 type MainTabParamList = {
@@ -86,11 +89,13 @@ export default function App() {
   useEffect(() => {
     let isActive = true;
 
-    registerForPushNotificationsAsync().then((token) => {
-      if (isActive && token) {
-        console.log("Expo push token:", token);
-      }
-    });
+    if (canRegisterForRemotePushNotifications()) {
+      registerForPushNotificationsAsync().then((token) => {
+        if (isActive && token) {
+          console.log("Expo push token:", token);
+        }
+      });
+    }
 
     const responseSubscription =
       Notifications.addNotificationResponseReceivedListener((response) => {

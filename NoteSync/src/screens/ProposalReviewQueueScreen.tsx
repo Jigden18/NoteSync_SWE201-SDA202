@@ -13,6 +13,7 @@ import { timeAgo, User } from "../utils/helpers";
 import { useNoteData } from "../contexts/NoteDataContext";
 import { MOCK_MODULES, Proposal } from "../data/mockData";
 import { Header } from "../components/layout/Header";
+import { Avatar } from "../components/ui/Avatar";
 import { Badge } from "../components/ui/Badge";
 import { Btn } from "../components/ui/Btn";
 import { EmptyState } from "../components/ui/EmptyState";
@@ -165,33 +166,50 @@ export const ProposalReviewQueueScreen: React.FC<
 
               return (
                 <View key={proposal.id} style={styles.card}>
-                  <View style={styles.cardHeader}>
-                    <View style={styles.cardMeta}>
-                      <Badge
-                        label={
-                          proposal.diffType === "inline" ? "Inline" : "Full doc"
-                        }
-                        color={
-                          proposal.diffType === "inline" ? "accent" : "gray"
-                        }
-                        small
-                      />
-                      <Text style={styles.cardTitle} numberOfLines={1}>
-                        {note?.title || "Untitled note"}
+                  <View style={styles.cardHeaderRow}>
+                    <Avatar name={proposal.proposedBy} size={40} />
+                    <View style={styles.cardHeaderRight}>
+                      <View style={styles.cardMetaRow}>
+                        <Badge
+                          label={
+                            proposal.diffType === "inline"
+                              ? "Inline"
+                              : "Full doc"
+                          }
+                          color={
+                            proposal.diffType === "inline" ? "accent" : "gray"
+                          }
+                          small
+                        />
+                        <Text style={styles.cardTitle} numberOfLines={1}>
+                          {note?.title || "Untitled note"}
+                        </Text>
+                      </View>
+
+                      <Text style={styles.cardSubtitle} numberOfLines={1}>
+                        {module?.code || "Unknown module"} ·{" "}
+                        {proposal.proposedBy} · {timeAgo(proposal.createdAt)}
                       </Text>
                     </View>
-                    <View style={styles.votePill}>
+
+                    <TouchableOpacity
+                      accessible
+                      accessibilityLabel={`Upvotes: ${proposal.upvoteCount}`}
+                      onLongPress={() =>
+                        Alert.alert(
+                          "Upvotes",
+                          "Tapping the heart shows popularity. Use lecturer review to apply changes.",
+                        )
+                      }
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      style={styles.votePill}
+                    >
                       <Ionicons name="heart" size={14} color={C.accent} />
                       <Text style={styles.voteText}>
                         {proposal.upvoteCount}
                       </Text>
-                    </View>
+                    </TouchableOpacity>
                   </View>
-
-                  <Text style={styles.cardSubtitle}>
-                    {module?.code || "Unknown module"} · {proposal.proposedBy} ·{" "}
-                    {timeAgo(proposal.createdAt)}
-                  </Text>
 
                   <Text style={styles.summaryText}>{proposal.summary}</Text>
 
@@ -201,6 +219,8 @@ export const ProposalReviewQueueScreen: React.FC<
                     <TouchableOpacity
                       onPress={() => setSelectedProposal(proposal)}
                       style={styles.linkBtn}
+                      accessibilityLabel="View diff"
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
                       <Text style={styles.linkBtnText}>View diff</Text>
                     </TouchableOpacity>
@@ -209,6 +229,10 @@ export const ProposalReviewQueueScreen: React.FC<
                         size="sm"
                         variant="secondary"
                         onPress={() => approveProposal(proposal)}
+                        onLongPress={() => {
+                          setProposalStatus(proposal.id, "approved");
+                          showToast("Proposal approved (quick)");
+                        }}
                       >
                         Approve
                       </Btn>
@@ -331,6 +355,20 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: 12,
   },
+  cardHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  cardHeaderRight: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  cardMetaRow: {
+    flex: 1,
+    gap: 8,
+  },
   cardMeta: {
     flex: 1,
     gap: 8,
@@ -381,7 +419,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
   },
+  modalDiffRemoved: {
+    color: C.danger,
+    fontSize: 13,
+    lineHeight: 20,
+  },
   diffAdded: {
+    color: C.success,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  modalDiffAdded: {
     color: C.success,
     fontSize: 13,
     lineHeight: 20,

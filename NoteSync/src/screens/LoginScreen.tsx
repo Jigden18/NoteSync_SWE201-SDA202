@@ -22,6 +22,9 @@ interface LoginScreenProps {
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const [id, setId] = useState("");
   const [pw, setPw] = useState("");
+  const [selectedRole, setSelectedRole] = useState<"student" | "lecturer">(
+    "student",
+  );
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
@@ -34,7 +37,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     setLoading(true);
     setErr("");
     await delay(600);
-    const user = id.includes("@") ? MOCK_LECTURER : MOCK_STUDENT;
+    const user = selectedRole === "lecturer" ? MOCK_LECTURER : MOCK_STUDENT;
     setLoading(false);
     onLogin(user as User);
   };
@@ -47,10 +50,52 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <Text style={styles.logo}>NoteSync</Text>
-          <Text style={styles.tagline}>Collaborative lecture notes, reimagined</Text>
+          <Text style={styles.tagline}>
+            Collaborative lecture notes, reimagined
+          </Text>
         </View>
 
         <View style={styles.card}>
+          <Text style={styles.label}>Demo role</Text>
+          <View style={styles.roleRow}>
+            <TouchableOpacity
+              onPress={() => setSelectedRole("student")}
+              style={[
+                styles.roleChip,
+                selectedRole === "student" && styles.roleChipActive,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Select student role"
+            >
+              <Text
+                style={[
+                  styles.roleChipText,
+                  selectedRole === "student" && styles.roleChipTextActive,
+                ]}
+              >
+                Student
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setSelectedRole("lecturer")}
+              style={[
+                styles.roleChip,
+                selectedRole === "lecturer" && styles.roleChipActive,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Select lecturer role"
+            >
+              <Text
+                style={[
+                  styles.roleChipText,
+                  selectedRole === "lecturer" && styles.roleChipTextActive,
+                ]}
+              >
+                Lecturer
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           <Text style={styles.label}>Student ID or Email</Text>
           <Input
             value={id}
@@ -88,14 +133,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
           </Btn>
 
           <Text style={styles.demoText}>
-            Demo: use any student ID (e.g. <Text style={styles.demoBold}>STU001</Text>) or email
-            (e.g. <Text style={styles.demoBold}>dr@cst.edu.bt</Text>) + any password
+            Demo: choose a role above, then use any ID/email and password
           </Text>
         </View>
 
         <TouchableOpacity onPress={() => alert("Registration flow")}>
           <Text style={styles.registerText}>
-            Don't have an account? <Text style={styles.registerLink}>Register</Text>
+            Don't have an account?{" "}
+            <Text style={styles.registerLink}>Register</Text>
           </Text>
         </TouchableOpacity>
       </ScrollView>
@@ -144,6 +189,32 @@ const styles = StyleSheet.create({
     color: C.textMuted,
     marginBottom: 6,
   },
+  roleRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  roleChip: {
+    flex: 1,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingVertical: 10,
+    alignItems: "center",
+    backgroundColor: C.surface,
+  },
+  roleChipActive: {
+    backgroundColor: C.accentLight,
+    borderColor: C.accent,
+  },
+  roleChipText: {
+    fontSize: 13,
+    color: C.textSecondary,
+    fontWeight: "600",
+  },
+  roleChipTextActive: {
+    color: C.accent,
+  },
   passwordContainer: {
     position: "relative",
   },
@@ -168,9 +239,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: C.textMuted,
     marginTop: 16,
-  },
-  demoBold: {
-    fontWeight: "600",
   },
   registerText: {
     textAlign: "center",

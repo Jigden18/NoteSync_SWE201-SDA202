@@ -12,6 +12,7 @@ import { C } from "../../constants/colors";
 interface BtnProps {
   children: React.ReactNode;
   onPress?: () => void;
+  onLongPress?: () => void;
   variant?: "primary" | "secondary" | "danger" | "ghost";
   size?: "sm" | "md" | "lg";
   full?: boolean;
@@ -24,6 +25,7 @@ interface BtnProps {
 export const Btn: React.FC<BtnProps> = ({
   children,
   onPress,
+  onLongPress,
   variant = "primary",
   size = "md",
   full,
@@ -40,8 +42,16 @@ export const Btn: React.FC<BtnProps> = ({
 
   const variantStyles = {
     primary: { backgroundColor: C.accent },
-    secondary: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
-    danger: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.danger },
+    secondary: {
+      backgroundColor: C.surface,
+      borderWidth: 1,
+      borderColor: C.border,
+    },
+    danger: {
+      backgroundColor: C.surface,
+      borderWidth: 1,
+      borderColor: C.danger,
+    },
     ghost: { backgroundColor: "transparent" },
   };
 
@@ -55,6 +65,7 @@ export const Btn: React.FC<BtnProps> = ({
   return (
     <TouchableOpacity
       onPress={onPress}
+      onLongPress={onLongPress}
       disabled={disabled || loading}
       style={[
         styles.base,
@@ -69,7 +80,13 @@ export const Btn: React.FC<BtnProps> = ({
       {loading ? (
         <ActivityIndicator color={textColors[variant]} />
       ) : (
-        <Text style={[styles.text, { fontSize: sizeConfig[size].fontSize, color: textColors[variant] }, textStyle]}>
+        <Text
+          style={[
+            styles.text,
+            { fontSize: sizeConfig[size].fontSize, color: textColors[variant] },
+            textStyle,
+          ]}
+        >
           {children}
         </Text>
       )}
