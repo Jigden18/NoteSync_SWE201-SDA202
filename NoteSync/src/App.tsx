@@ -1,11 +1,15 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { createNativeStackNavigator, NativeStackNavigationProp } from "@react-navigation/native-stack";
+import {
+  createNativeStackNavigator,
+  NativeStackNavigationProp,
+} from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
+import * as Notifications from "expo-notifications";
 import { MOCK_NOTIFICATIONS } from "./data/mockData";
 import { User } from "./utils/helpers";
 import { NoteDataProvider } from "./contexts/NoteDataContext";
@@ -24,6 +28,8 @@ import { SearchScreen } from "./screens/SearchScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
 import { ProfileScreen } from "./screens/ProfileScreen";
 import { C } from "./constants/colors";
+import { registerForPushNotificationsAsync } from "./utils/pushNotifications";
+import { resolveNotificationRoute } from "./utils/notificationRouting";
 
 type MainTabParamList = {
   Home: undefined;
@@ -35,7 +41,7 @@ type MainTabParamList = {
 type RootStackParamList = {
   Main: undefined;
   Module: { id: string };
-  Note: { id: string };
+  Note: { id: string; initialTab?: "notes" | "proposals" | "comments" };
   Editor: { noteId: string };
   Versions: { noteId: string };
   Export: { noteId: string };
@@ -45,7 +51,15 @@ type RootStackParamList = {
   Analytics: { moduleId: string };
 };
 
-type ScreenName = "module" | "note" | "editor" | "versions" | "export" | "annotations" | "createNote" | "analytics";
+type ScreenName =
+  | "module"
+  | "note"
+  | "editor"
+  | "versions"
+  | "export"
+  | "annotations"
+  | "createNote"
+  | "analytics";
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -63,6 +77,50 @@ const screenMap: Record<ScreenName, keyof RootStackParamList> = {
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
+  const navigationRef = useRef<any>(null);
+
+  useEffect(() => {
+    let isActive = true;
+
+    registerForPushNotificationsAsync().then((token) => {
+      if (isActive && token) {
+        console.log("Expo push token:", token);
+      }
+    });
+
+    const responseSubscription =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        const route = resolveNotificationRoute(
+          response.notification.request.content.data as any,
+        );
+        if (route) {
+          navigationRef.current?.navigate("Note", {
+            id: route.noteId,
+            initialTab: route.initialTab,
+          });
+        }
+      });
+
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      const route = response
+        ? resolveNotificationRoute(
+            response.notification.request.content.data as any,
+          )
+        : null;
+
+      if (route) {
+        navigationRef.current?.navigate("Note", {
+          id: route.noteId,
+          initialTab: route.initialTab,
+        });
+      }
+    });
+
+    return () => {
+      isActive = false;
+      responseSubscription.remove();
+    };
+  }, []);
 
   if (!user) {
     return <LoginScreen onLogin={(u) => setUser(u)} />;
@@ -74,103 +132,110 @@ export default function App() {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
       <NoteDataProvider>
-        <NavigationContainer>
+        <NavigationContainer ref={navigationRef}>
           <Stack.Navigator screenOptions={{ headerShown: false }}>
             <Stack.Screen name="Main">
-            {({ navigation }) => (
-              <MainTabs
-                user={user}
-                unreadCount={unreadCount}
-                onLogout={() => setUser(null)}
-                rootNavigation={navigation}
-              />
-            )}
-          </Stack.Screen>
-          <Stack.Screen name="Module">
-            {({ navigation, route }) => (
-              <ModuleDetailScreen
-                id={route.params.id}
-                user={user}
-                navigate={(screen, params) =>
-                  navigation.navigate(screenMap[screen as ScreenName], params)
-                }
-                onBack={() => navigation.goBack()}
-              />
-            )}
-          </Stack.Screen>
-          <Stack.Screen name="Note">
-            {({ navigation, route }) => (
-              <NoteDetailScreen
-                id={route.params.id}
-                user={user}
-                navigate={(screen, params) =>
-                  navigation.navigate(screenMap[screen as ScreenName], params)
-                }
-                onBack={() => navigation.goBack()}
-              />
-            )}
-          </Stack.Screen>
-          <Stack.Screen name="Editor">
-            {({ navigation, route }) => (
-              <EditorScreen
-                noteId={route.params.noteId}
-                user={user}
-                navigate={(screen, params) =>
-                  navigation.navigate(screenMap[screen as ScreenName], params)
-                }
-                onBack={() => navigation.goBack()}
-              />
-            )}
-          </Stack.Screen>
-          <Stack.Screen name="Preview">
-            {({ navigation, route }) => (
-              <PreviewScreen
-                noteId={route.params.noteId}
-                content={route.params.content}
-                onBack={() => navigation.goBack()}
-                onSubmit={() => navigation.goBack()}
-              />
-            )}
-          </Stack.Screen>
-          <Stack.Screen name="Versions">
-            {({ navigation, route }) => (
-              <VersionHistoryScreen
-                noteId={route.params.noteId}
-                user={user}
-                onBack={() => navigation.goBack()}
-              />
-            )}
-          </Stack.Screen>
-          <Stack.Screen name="Export">
-            {({ navigation, route }) => (
-              <ExportScreen
-                noteId={route.params.noteId}
-                user={user}
-                onBack={() => navigation.goBack()}
-              />
-            )}
-          </Stack.Screen>
-          <Stack.Screen name="Annotations">
-            {({ navigation, route }) => (
-              <AnnotationsScreen
-                noteId={route.params.noteId}
-                user={user}
-                onBack={() => navigation.goBack()}
-              />
-            )}
-          </Stack.Screen>
-          <Stack.Screen name="CreateNote">
-            {({ navigation, route }) => (
-              <CreateNoteScreen moduleId={route.params.moduleId} onBack={() => navigation.goBack()} />
-            )}
-          </Stack.Screen>
-          <Stack.Screen name="Analytics">
-            {({ navigation, route }) => (
-              <AnalyticsScreen moduleId={route.params.moduleId} onBack={() => navigation.goBack()} />
-            )}
-          </Stack.Screen>
-        </Stack.Navigator>
-      </NavigationContainer>
+              {({ navigation }) => (
+                <MainTabs
+                  user={user}
+                  unreadCount={unreadCount}
+                  onLogout={() => setUser(null)}
+                  rootNavigation={navigation}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Module">
+              {({ navigation, route }) => (
+                <ModuleDetailScreen
+                  id={route.params.id}
+                  user={user}
+                  navigate={(screen, params) =>
+                    navigation.navigate(screenMap[screen as ScreenName], params)
+                  }
+                  onBack={() => navigation.goBack()}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Note">
+              {({ navigation, route }) => (
+                <NoteDetailScreen
+                  id={route.params.id}
+                  user={user}
+                  initialTab={route.params.initialTab}
+                  navigate={(screen, params) =>
+                    navigation.navigate(screenMap[screen as ScreenName], params)
+                  }
+                  onBack={() => navigation.goBack()}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Editor">
+              {({ navigation, route }) => (
+                <EditorScreen
+                  noteId={route.params.noteId}
+                  user={user}
+                  navigate={(screen, params) =>
+                    navigation.navigate(screenMap[screen as ScreenName], params)
+                  }
+                  onBack={() => navigation.goBack()}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Preview">
+              {({ navigation, route }) => (
+                <PreviewScreen
+                  noteId={route.params.noteId}
+                  content={route.params.content}
+                  onBack={() => navigation.goBack()}
+                  onSubmit={() => navigation.goBack()}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Versions">
+              {({ navigation, route }) => (
+                <VersionHistoryScreen
+                  noteId={route.params.noteId}
+                  user={user}
+                  onBack={() => navigation.goBack()}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Export">
+              {({ navigation, route }) => (
+                <ExportScreen
+                  noteId={route.params.noteId}
+                  user={user}
+                  onBack={() => navigation.goBack()}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Annotations">
+              {({ navigation, route }) => (
+                <AnnotationsScreen
+                  noteId={route.params.noteId}
+                  user={user}
+                  onBack={() => navigation.goBack()}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="CreateNote">
+              {({ navigation, route }) => (
+                <CreateNoteScreen
+                  moduleId={route.params.moduleId}
+                  onBack={() => navigation.goBack()}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Analytics">
+              {({ navigation, route }) => (
+                <AnalyticsScreen
+                  moduleId={route.params.moduleId}
+                  onBack={() => navigation.goBack()}
+                />
+              )}
+            </Stack.Screen>
+          </Stack.Navigator>
+        </NavigationContainer>
       </NoteDataProvider>
     </SafeAreaView>
   );
@@ -206,7 +271,10 @@ const MainTabs: React.FC<{
           fontSize: 11,
         },
         tabBarIcon: ({ color, size }) => {
-          const icons: Record<keyof MainTabParamList, keyof typeof Ionicons.glyphMap> = {
+          const icons: Record<
+            keyof MainTabParamList,
+            keyof typeof Ionicons.glyphMap
+          > = {
             Home: "home-outline",
             Search: "search-outline",
             Notifications: "notifications-outline",
@@ -225,9 +293,10 @@ const MainTabs: React.FC<{
       </Tab.Screen>
       <Tab.Screen
         name="Notifications"
-        component={NotificationsScreen}
         options={{ tabBarBadge: unreadCount > 0 ? unreadCount : undefined }}
-      />
+      >
+        {() => <NotificationsScreen />}
+      </Tab.Screen>
       <Tab.Screen name="Profile">
         {() => <ProfileScreen user={user} onLogout={onLogout} />}
       </Tab.Screen>

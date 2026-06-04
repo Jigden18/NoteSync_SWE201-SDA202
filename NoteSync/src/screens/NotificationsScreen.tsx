@@ -6,11 +6,13 @@ import {
   ScrollView,
   TouchableOpacity,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import { C } from "../constants/colors";
 import { timeAgo } from "../utils/helpers";
 import { MOCK_NOTIFICATIONS, Notification } from "../data/mockData";
 import { Header } from "../components/layout/Header";
 import { Ionicons } from "@expo/vector-icons";
+import { resolveNotificationRoute } from "../utils/notificationRouting";
 
 const iconMap: Record<Notification["type"], keyof typeof Ionicons.glyphMap> = {
   proposal_approved: "checkmark-circle",
@@ -30,6 +32,7 @@ const iconColorMap: Record<Notification["type"], string> = {
 
 export const NotificationsScreen: React.FC = () => {
   const [notifs, setNotifs] = useState<Notification[]>([...MOCK_NOTIFICATIONS]);
+  const navigation = useNavigation<any>();
 
   const markAll = () => {
     setNotifs((ns) => ns.map((n) => ({ ...n, read: true })));
@@ -37,6 +40,17 @@ export const NotificationsScreen: React.FC = () => {
 
   const markRead = (id: string) => {
     setNotifs((ns) => ns.map((n) => (n.id === id ? { ...n, read: true } : n)));
+  };
+
+  const openNotification = (notification: Notification) => {
+    markRead(notification.id);
+    const route = resolveNotificationRoute(notification);
+    if (route) {
+      navigation.navigate("Note", {
+        id: route.noteId,
+        initialTab: route.initialTab,
+      });
+    }
   };
 
   return (
@@ -55,11 +69,8 @@ export const NotificationsScreen: React.FC = () => {
           {notifs.map((n) => (
             <TouchableOpacity
               key={n.id}
-              onPress={() => markRead(n.id)}
-              style={[
-                styles.notifCard,
-                !n.read && styles.unreadNotif,
-              ]}
+              onPress={() => openNotification(n)}
+              style={[styles.notifCard, !n.read && styles.unreadNotif]}
             >
               <View style={styles.notifIcon}>
                 <Ionicons
@@ -71,10 +82,7 @@ export const NotificationsScreen: React.FC = () => {
               <View style={styles.notifContent}>
                 <View style={styles.notifHeader}>
                   <Text
-                    style={[
-                      styles.notifTitle,
-                      !n.read && styles.unreadTitle,
-                    ]}
+                    style={[styles.notifTitle, !n.read && styles.unreadTitle]}
                   >
                     {n.title}
                   </Text>

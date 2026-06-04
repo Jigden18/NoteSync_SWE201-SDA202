@@ -80,7 +80,10 @@ const NotesTab: React.FC<NotesTabProps> = ({ note, user, navigate }) => {
         <Badge label={`v${note.currentVersionNumber}`} color="accent" />
         {note.isLocked && <Badge label="Locked" color="gray" />}
         {note.pendingProposalCount > 0 && (
-          <Badge label={`${note.pendingProposalCount} pending proposals`} color="warning" />
+          <Badge
+            label={`${note.pendingProposalCount} pending proposals`}
+            color="warning"
+          />
         )}
         <TouchableOpacity
           onPress={() => navigate("versions", { noteId: note.id })}
@@ -152,7 +155,9 @@ const NotesTab: React.FC<NotesTabProps> = ({ note, user, navigate }) => {
           ) : (
             <View style={styles.selectHintRow}>
               <Ionicons name="bulb-outline" size={16} color={C.textMuted} />
-              <Text style={styles.selectHint}>Tap and drag text above to suggest an edit</Text>
+              <Text style={styles.selectHint}>
+                Tap and drag text above to suggest an edit
+              </Text>
             </View>
           )}
         </View>
@@ -175,40 +180,71 @@ const NotesTab: React.FC<NotesTabProps> = ({ note, user, navigate }) => {
           {user.role === "student" ? (
             <Btn full onPress={() => navigate("editor", { noteId: note.id })}>
               <Text style={styles.btnIconText}>
-                <Ionicons name="pencil" size={16} color={C.textPrimary} /> Propose Edit
+                <Ionicons name="pencil" size={16} color={C.textPrimary} />{" "}
+                Propose Edit
               </Text>
             </Btn>
           ) : (
-            <Btn full variant="secondary" onPress={() => navigate("annotations", { noteId: note.id })}>
+            <Btn
+              full
+              variant="secondary"
+              onPress={() => navigate("annotations", { noteId: note.id })}
+            >
               <Text style={styles.btnIconText}>
-                <Ionicons name="pin" size={16} color={C.textPrimary} /> Add Annotation
+                <Ionicons name="pin" size={16} color={C.textPrimary} /> Add
+                Annotation
               </Text>
             </Btn>
           )}
         </View>
       )}
 
-      <Sheet open={suggestSheet} onClose={() => setSuggestSheet(false)} title="Suggest an Edit">
+      <Sheet
+        open={suggestSheet}
+        onClose={() => setSuggestSheet(false)}
+        title="Suggest an Edit"
+      >
         <Text style={styles.sheetLabel}>ORIGINAL</Text>
         <View style={styles.originalTextContainer}>
           <Text style={styles.originalText}>"{selectedText}"</Text>
         </View>
         <Text style={styles.sheetLabel}>YOUR SUGGESTION</Text>
-        <Input value={suggestion} onChangeText={setSuggestion} multiline rows={3} />
+        <Input
+          value={suggestion}
+          onChangeText={setSuggestion}
+          multiline
+          rows={3}
+        />
         <View style={{ height: 10 }} />
         <Text style={styles.sheetLabel}>WHAT CHANGED?</Text>
-        <Input value={changeDesc} onChangeText={setChangeDesc} placeholder="Brief description of your change" />
+        <Input
+          value={changeDesc}
+          onChangeText={setChangeDesc}
+          placeholder="Brief description of your change"
+        />
         <View style={{ height: 14 }} />
-        <Btn onPress={handleSubmitSuggest} full disabled={!suggestion || !changeDesc}>
+        <Btn
+          onPress={handleSubmitSuggest}
+          full
+          disabled={!suggestion || !changeDesc}
+        >
           Submit Suggestion
         </Btn>
       </Sheet>
 
-      <Modal open={!!showAnnotation} onClose={() => setShowAnnotation(null)} title="Lecturer Annotation">
+      <Modal
+        open={!!showAnnotation}
+        onClose={() => setShowAnnotation(null)}
+        title="Lecturer Annotation"
+      >
         {showAnnotation && (
           <>
-            <Text style={styles.modalAnnotationText}>{showAnnotation.annotationText}</Text>
-            <Text style={styles.modalAnnotationDate}>{fmtDate(showAnnotation.createdAt)}</Text>
+            <Text style={styles.modalAnnotationText}>
+              {showAnnotation.annotationText}
+            </Text>
+            <Text style={styles.modalAnnotationDate}>
+              {fmtDate(showAnnotation.createdAt)}
+            </Text>
           </>
         )}
       </Modal>
@@ -226,7 +262,9 @@ interface ProposalsTabProps {
 
 const ProposalsTab: React.FC<ProposalsTabProps> = ({ note, user }) => {
   const [proposals, setProposals] = useState<Proposal[] | null>(null);
-  const [filter, setFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
+  const [filter, setFilter] = useState<
+    "all" | "pending" | "approved" | "rejected"
+  >("all");
   const [rejectSheet, setRejectSheet] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [toast, setToast] = useState("");
@@ -242,41 +280,56 @@ const ProposalsTab: React.FC<ProposalsTabProps> = ({ note, user }) => {
   };
 
   const handleUpvote = (id: string) => {
-    setProposals((ps) =>
-      ps?.map((p) =>
-        p.id === id
-          ? {
-              ...p,
-              hasUpvoted: !p.hasUpvoted,
-              upvoteCount: p.hasUpvoted ? p.upvoteCount - 1 : p.upvoteCount + 1,
-            }
-          : p
-      ) || null
+    setProposals(
+      (ps) =>
+        ps?.map((p) =>
+          p.id === id
+            ? {
+                ...p,
+                hasUpvoted: !p.hasUpvoted,
+                upvoteCount: p.hasUpvoted
+                  ? p.upvoteCount - 1
+                  : p.upvoteCount + 1,
+              }
+            : p,
+        ) || null,
     );
   };
 
   const handleApprove = async (id: string) => {
     await delay(300);
-    setProposals((ps) =>
-      ps?.map((p) => (p.id === id ? { ...p, status: "approved" } : p)) || null
+    setProposals(
+      (ps) =>
+        ps?.map((p) => (p.id === id ? { ...p, status: "approved" } : p)) ||
+        null,
     );
     showToast("Proposal approved ✓");
   };
 
   const handleReject = async () => {
     await delay(300);
-    setProposals((ps) =>
-      ps?.map((p) =>
-        p.id === rejectSheet ? { ...p, status: "rejected", rejectionReason: reason } : p
-      ) || null
+    setProposals(
+      (ps) =>
+        ps?.map((p) =>
+          p.id === rejectSheet
+            ? { ...p, status: "rejected", rejectionReason: reason }
+            : p,
+        ) || null,
     );
     setRejectSheet(null);
     setReason("");
     showToast("Proposal rejected.");
   };
 
-  const filtered = proposals?.filter((p) => filter === "all" || p.status === filter);
-  const FILTERS: Array<"all" | "pending" | "approved" | "rejected"> = ["all", "pending", "approved", "rejected"];
+  const filtered = proposals?.filter(
+    (p) => filter === "all" || p.status === filter,
+  );
+  const FILTERS: Array<"all" | "pending" | "approved" | "rejected"> = [
+    "all",
+    "pending",
+    "approved",
+    "rejected",
+  ];
   const statusColor = (s: string) =>
     s === "approved" ? "success" : s === "rejected" ? "danger" : "gray";
 
@@ -287,10 +340,7 @@ const ProposalsTab: React.FC<ProposalsTabProps> = ({ note, user }) => {
           <TouchableOpacity
             key={f}
             onPress={() => setFilter(f)}
-            style={[
-              styles.filterChip,
-              filter === f && styles.filterChipActive,
-            ]}
+            style={[styles.filterChip, filter === f && styles.filterChipActive]}
           >
             <Text
               style={[
@@ -308,7 +358,10 @@ const ProposalsTab: React.FC<ProposalsTabProps> = ({ note, user }) => {
         {!proposals ? (
           <ListSkeleton />
         ) : !filtered?.length ? (
-          <EmptyState iconName="clipboard-outline" title={`No ${filter} proposals`} />
+          <EmptyState
+            iconName="clipboard-outline"
+            title={`No ${filter} proposals`}
+          />
         ) : (
           filtered.map((p) => (
             <View key={p.id} style={styles.proposalCard}>
@@ -323,7 +376,9 @@ const ProposalsTab: React.FC<ProposalsTabProps> = ({ note, user }) => {
                     />
                   )}
                   <Text style={styles.proposalAuthor}>{p.proposedBy}</Text>
-                  <Text style={styles.proposalTime}>{timeAgo(p.createdAt)}</Text>
+                  <Text style={styles.proposalTime}>
+                    {timeAgo(p.createdAt)}
+                  </Text>
                 </View>
                 <View style={styles.proposalActions}>
                   <TouchableOpacity
@@ -345,15 +400,25 @@ const ProposalsTab: React.FC<ProposalsTabProps> = ({ note, user }) => {
 
               {p.isInline && p.originalText && (
                 <View style={styles.inlineDiff}>
-                  <Text style={styles.originalTextInline}>{p.originalText}</Text>
-                  <Ionicons name="arrow-forward" size={14} color={C.textMuted} />
-                  <Text style={styles.suggestedTextInline}>{p.suggestedText}</Text>
+                  <Text style={styles.originalTextInline}>
+                    {p.originalText}
+                  </Text>
+                  <Ionicons
+                    name="arrow-forward"
+                    size={14}
+                    color={C.textMuted}
+                  />
+                  <Text style={styles.suggestedTextInline}>
+                    {p.suggestedText}
+                  </Text>
                 </View>
               )}
 
               {!p.isInline && (
                 <TouchableOpacity
-                  onPress={() => setExpanded((e) => ({ ...e, [p.id]: !e[p.id] }))}
+                  onPress={() =>
+                    setExpanded((e) => ({ ...e, [p.id]: !e[p.id] }))
+                  }
                   style={styles.viewDiffBtn}
                 >
                   <View style={styles.viewDiffContent}>
@@ -371,12 +436,18 @@ const ProposalsTab: React.FC<ProposalsTabProps> = ({ note, user }) => {
 
               {expanded[p.id] && (
                 <View style={styles.diffContainer}>
-                  <Text style={styles.diffTitle}>Changes from current version:</Text>
+                  <Text style={styles.diffTitle}>
+                    Changes from current version:
+                  </Text>
                   <View style={styles.diffLine}>
-                    <Text style={styles.diffAdded}>+ New Architecture (JSI) section added</Text>
+                    <Text style={styles.diffAdded}>
+                      + New Architecture (JSI) section added
+                    </Text>
                   </View>
                   <View style={styles.diffLine}>
-                    <Text style={styles.diffAdded}>+ Metro Bundler added to Core Concepts</Text>
+                    <Text style={styles.diffAdded}>
+                      + Metro Bundler added to Core Concepts
+                    </Text>
                   </View>
                 </View>
               )}
@@ -413,8 +484,17 @@ const ProposalsTab: React.FC<ProposalsTabProps> = ({ note, user }) => {
         )}
       </View>
 
-      <Sheet open={!!rejectSheet} onClose={() => setRejectSheet(null)} title="Reject Proposal" half>
-        <Input value={reason} onChangeText={setReason} placeholder="Reason for rejection (optional)" />
+      <Sheet
+        open={!!rejectSheet}
+        onClose={() => setRejectSheet(null)}
+        title="Reject Proposal"
+        half
+      >
+        <Input
+          value={reason}
+          onChangeText={setReason}
+          placeholder="Reason for rejection (optional)"
+        />
         <View style={{ height: 14 }} />
         <Btn full variant="danger" onPress={handleReject}>
           Reject Proposal
@@ -453,10 +533,16 @@ const CommentsTab: React.FC<CommentsTabProps> = ({ note, user }) => {
       replies: [],
     };
     if (replyTo) {
-      setComments((cs) =>
-        cs?.map((c) =>
-          c.id === replyTo ? { ...c, replies: [...c.replies, { ...newC, id: `r-${Date.now()}` }] } : c
-        ) || null
+      setComments(
+        (cs) =>
+          cs?.map((c) =>
+            c.id === replyTo
+              ? {
+                  ...c,
+                  replies: [...c.replies, { ...newC, id: `r-${Date.now()}` }],
+                }
+              : c,
+          ) || null,
       );
     } else {
       setComments((cs) => [...(cs || []), newC]);
@@ -465,7 +551,10 @@ const CommentsTab: React.FC<CommentsTabProps> = ({ note, user }) => {
     setReplyTo(null);
   };
 
-  const CommentItem: React.FC<{ c: Comment; isReply?: boolean }> = ({ c, isReply }) => (
+  const CommentItem: React.FC<{ c: Comment; isReply?: boolean }> = ({
+    c,
+    isReply,
+  }) => (
     <View style={[styles.commentItem, isReply && styles.replyComment]}>
       <Avatar name={c.authorName} size={isReply ? 28 : 34} />
       <View
@@ -476,12 +565,17 @@ const CommentsTab: React.FC<CommentsTabProps> = ({ note, user }) => {
       >
         <View style={styles.commentHeader}>
           <Text style={styles.commentAuthor}>{c.authorName}</Text>
-          {c.authorRole === "lecturer" && <Badge label="Lecturer" color="accent" small />}
+          {c.authorRole === "lecturer" && (
+            <Badge label="Lecturer" color="accent" small />
+          )}
           <Text style={styles.commentTime}>{timeAgo(c.createdAt)}</Text>
         </View>
         <Text style={styles.commentContent}>{c.content}</Text>
         {!isReply && (
-          <TouchableOpacity onPress={() => setReplyTo(c.id)} style={styles.replyBtn}>
+          <TouchableOpacity
+            onPress={() => setReplyTo(c.id)}
+            style={styles.replyBtn}
+          >
             <Text style={styles.replyBtnText}>Reply</Text>
           </TouchableOpacity>
         )}
@@ -491,12 +585,19 @@ const CommentsTab: React.FC<CommentsTabProps> = ({ note, user }) => {
 
   return (
     <View style={styles.commentsContainer}>
-      <ScrollView style={styles.commentsScroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.commentsScroll}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.commentsList}>
           {!comments ? (
             <ListSkeleton count={2} />
           ) : comments.length === 0 ? (
-            <EmptyState iconName="chatbubbles-outline" title="No comments yet" sub="Start the discussion" />
+            <EmptyState
+              iconName="chatbubbles-outline"
+              title="No comments yet"
+              sub="Start the discussion"
+            />
           ) : (
             comments.map((c) => (
               <View key={c.id}>
@@ -543,6 +644,7 @@ interface NoteDetailScreenProps {
   user: User;
   navigate: (screen: string, params?: any) => void;
   onBack: () => void;
+  initialTab?: "notes" | "proposals" | "comments";
 }
 
 export const NoteDetailScreen: React.FC<NoteDetailScreenProps> = ({
@@ -550,10 +652,17 @@ export const NoteDetailScreen: React.FC<NoteDetailScreenProps> = ({
   user,
   navigate,
   onBack,
+  initialTab = "notes",
 }) => {
-  const [tab, setTab] = useState<"notes" | "proposals" | "comments">("notes");
+  const [tab, setTab] = useState<"notes" | "proposals" | "comments">(
+    initialTab,
+  );
   const { getNote } = useNoteData();
   const note = getNote(id);
+
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab]);
 
   if (!note) {
     return (
@@ -563,7 +672,10 @@ export const NoteDetailScreen: React.FC<NoteDetailScreenProps> = ({
     );
   }
 
-  const PILL_TABS: Array<{ id: "notes" | "proposals" | "comments"; label: string }> = [
+  const PILL_TABS: Array<{
+    id: "notes" | "proposals" | "comments";
+    label: string;
+  }> = [
     { id: "notes", label: "Notes" },
     {
       id: "proposals",
@@ -591,14 +703,18 @@ export const NoteDetailScreen: React.FC<NoteDetailScreenProps> = ({
             onPress={() => setTab(t.id)}
             style={[styles.tab, tab === t.id && styles.activeTab]}
           >
-            <Text style={[styles.tabText, tab === t.id && styles.activeTabText]}>
+            <Text
+              style={[styles.tabText, tab === t.id && styles.activeTabText]}
+            >
               {t.label}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {tab === "notes" && <NotesTab note={note} user={user} navigate={navigate} />}
+      {tab === "notes" && (
+        <NotesTab note={note} user={user} navigate={navigate} />
+      )}
       {tab === "proposals" && <ProposalsTab note={note} user={user} />}
       {tab === "comments" && <CommentsTab note={note} user={user} />}
     </View>
