@@ -19,6 +19,72 @@ import { Sheet } from "../components/ui/Sheet";
 import { Toast } from "../components/ui/Toast";
 import { Ionicons } from "@expo/vector-icons";
 
+type ProposalDraft = {
+  summary: string;
+  isInline: boolean;
+  originalText?: string;
+  suggestedText?: string;
+};
+
+const normalizeText = (text: string) => text.replace(/\s+/g, " ").trim();
+
+const buildProposalDraft = (
+  baseText: string,
+  nextText: string,
+): ProposalDraft | null => {
+  const base = normalizeText(baseText);
+  const next = normalizeText(nextText);
+
+  if (!base || base === next) {
+    return null;
+  }
+
+  let prefix = 0;
+  while (
+    prefix < base.length &&
+    prefix < next.length &&
+    base[prefix] === next[prefix]
+  ) {
+    prefix += 1;
+  }
+
+  let suffix = 0;
+  while (
+    suffix < base.length - prefix &&
+    suffix < next.length - prefix &&
+    base[base.length - 1 - suffix] === next[next.length - 1 - suffix]
+  ) {
+    suffix += 1;
+  }
+
+  const originalText = base.slice(prefix, base.length - suffix).trim();
+  const suggestedText = next.slice(prefix, next.length - suffix).trim();
+  const changeSize = Math.max(originalText.length, suggestedText.length);
+  const changeShare = changeSize / Math.max(base.length, next.length);
+  const isInline = changeSize > 0 && changeSize <= 140 && changeShare <= 0.35;
+
+  if (isInline) {
+    const summary =
+      originalText && suggestedText
+        ? `Update: ${originalText.slice(0, 40)}${originalText.length > 40 ? "..." : ""}`
+        : originalText
+          ? `Remove: ${originalText.slice(0, 40)}${originalText.length > 40 ? "..." : ""}`
+          : `Add: ${suggestedText.slice(0, 40)}${suggestedText.length > 40 ? "..." : ""}`;
+
+    return {
+      summary,
+      isInline: true,
+      originalText: originalText || undefined,
+      suggestedText: suggestedText || undefined,
+    };
+  }
+
+  return {
+    summary: "Full-document revision submitted",
+    isInline: false,
+  };
+};
+
 interface EditorScreenProps {
   noteId: string;
   user: User;
@@ -38,8 +104,13 @@ const TOOLS = [
   { icon: "image", label: "Image", style: "image" },
 ];
 
-export const EditorScreen: React.FC<EditorScreenProps> = ({ noteId, user, navigate, onBack }) => {
-  const { getNote, getVersion, createVersion } = useNoteData();
+export const EditorScreen: React.FC<EditorScreenProps> = ({
+  noteId,
+  user,
+  navigate,
+  onBack,
+}) => {
+  const { getNote, getVersion, createProposal } = useNoteData();
   const note = getNote(noteId);
   const version = note ? getVersion(note.currentVersionId) : undefined;
   const [content, setContent] = useState("");
@@ -48,6 +119,9 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({ noteId, user, naviga
   const [linkUrl, setLinkUrl] = useState("");
   const [linkText, setLinkText] = useState("");
   const [toast, setToast] = useState("");
+  const baseContent = version
+    ? normalizeText(version.content.replace(/<[^>]+>/g, " "))
+    : "";
 
   useEffect(() => {
     if (version) {
@@ -59,6 +133,27 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({ noteId, user, naviga
 
   const handlePreview = () => {
     navigate("Preview", { noteId, content });
+  };
+
+  const handleSubmitProposal = () => {
+    if (!version || !note) {
+      setToast("Unable to submit proposal right now.");
+      return;
+    }
+
+    const draft = buildProposalDraft(baseContent, content);
+    if (!draft) {
+      setToast("Make a change before submitting a proposal.");
+      return;
+    }
+
+    createProposal(note.id, user.fullName, draft.summary, {
+      isInline: draft.isInline,
+      originalText: draft.originalText,
+      suggestedText: draft.suggestedText,
+    });
+
+    onBack();
   };
 
   const insertAtCursor = (inserted: string) => {
@@ -132,7 +227,11 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({ noteId, user, naviga
         formatted = `\n1. ${selectedText}`;
         break;
       case "link":
-        setLinkText(selectedText.startsWith("http") ? selectedText : selectedText || "Link text");
+        setLinkText(
+          selectedText.startsWith("http")
+            ? selectedText
+            : selectedText || "Link text",
+        );
         setLinkUrl(selectedText.startsWith("http") ? selectedText : "");
         setLinkSheet(true);
         return;
@@ -148,12 +247,13 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({ noteId, user, naviga
 
   return (
     <View style={styles.container}>
-      <Header
-        title="Edit Note"
-        onBack={onBack}
-      />
+      <Header title="Edit Note" onBack={onBack} />
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.toolbar}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.toolbar}
+      >
         {TOOLS.map((tool) => (
           <TouchableOpacity
             key={tool.label}
@@ -161,7 +261,11 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({ noteId, user, naviga
             style={styles.toolBtn}
           >
             {tool.icon ? (
-              <Ionicons name={tool.icon as any} size={16} color={C.textPrimary} />
+              <Ionicons
+                name={tool.icon as any}
+                size={16}
+                color={C.textPrimary}
+              />
             ) : (
               <Text style={styles.toolText}>{tool.label}</Text>
             )}
@@ -183,16 +287,31 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({ noteId, user, naviga
             selection={selection}
           />
         </View>
-        <Text style={styles.hint}>Use toolbar buttons for headings, italics, links, and images.</Text>
+        <Text style={styles.hint}>
+          Use toolbar buttons for headings, italics, links, and images.
+        </Text>
       </ScrollView>
 
       <View style={styles.previewRow}>
-        <Btn full onPress={handlePreview}>
+        <Btn full onPress={handlePreview} variant="secondary">
           Preview final note
+        </Btn>
+        <View style={{ height: 10 }} />
+        <Btn
+          full
+          onPress={handleSubmitProposal}
+          disabled={!content.trim() || normalizeText(content) === baseContent}
+        >
+          Propose changes
         </Btn>
       </View>
 
-      <Sheet open={linkSheet} onClose={() => setLinkSheet(false)} title="Insert link" half>
+      <Sheet
+        open={linkSheet}
+        onClose={() => setLinkSheet(false)}
+        title="Insert link"
+        half
+      >
         <Input
           value={linkText}
           onChangeText={setLinkText}

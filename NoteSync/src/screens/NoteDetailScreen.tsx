@@ -261,6 +261,7 @@ interface ProposalsTabProps {
 }
 
 const ProposalsTab: React.FC<ProposalsTabProps> = ({ note, user }) => {
+  const { getProposalsForNote, proposals: allProposals } = useNoteData();
   const [proposals, setProposals] = useState<Proposal[] | null>(null);
   const [filter, setFilter] = useState<
     "all" | "pending" | "approved" | "rejected"
@@ -271,8 +272,8 @@ const ProposalsTab: React.FC<ProposalsTabProps> = ({ note, user }) => {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    delay(400).then(() => setProposals([...MOCK_PROPOSALS_INIT]));
-  }, [note]);
+    delay(400).then(() => setProposals([...getProposalsForNote(note.id)]));
+  }, [note.id, getProposalsForNote, allProposals]);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -657,12 +658,21 @@ export const NoteDetailScreen: React.FC<NoteDetailScreenProps> = ({
   const [tab, setTab] = useState<"notes" | "proposals" | "comments">(
     initialTab,
   );
-  const { getNote } = useNoteData();
+  const [toast, setToast] = useState("");
+  const { getNote, proposalToast, clearProposalToast } = useNoteData();
   const note = getNote(id);
 
   useEffect(() => {
     setTab(initialTab);
   }, [initialTab]);
+
+  useEffect(() => {
+    const pendingToast = proposalToast;
+    if (pendingToast && pendingToast.noteId === note?.id) {
+      setToast(pendingToast.message);
+      clearProposalToast();
+    }
+  }, [proposalToast, note?.id, clearProposalToast]);
 
   if (!note) {
     return (
@@ -717,6 +727,8 @@ export const NoteDetailScreen: React.FC<NoteDetailScreenProps> = ({
       )}
       {tab === "proposals" && <ProposalsTab note={note} user={user} />}
       {tab === "comments" && <CommentsTab note={note} user={user} />}
+
+      {toast && <Toast msg={toast} onClose={() => setToast("")} />}
     </View>
   );
 };

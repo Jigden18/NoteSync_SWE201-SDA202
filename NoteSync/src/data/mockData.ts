@@ -55,6 +55,7 @@ export interface Proposal {
   status: "pending" | "approved" | "rejected";
   createdAt: string;
   isInline: boolean;
+  diffType?: "inline" | "full-doc";
   originalText?: string;
   suggestedText?: string;
   rejectionReason?: string;
@@ -255,6 +256,7 @@ export const MOCK_PROPOSALS_INIT: Proposal[] = [
     status: "pending",
     createdAt: "2025-05-13T11:00:00Z",
     isInline: false,
+    diffType: "full-doc",
   },
   {
     id: "proposal-2",
@@ -266,6 +268,7 @@ export const MOCK_PROPOSALS_INIT: Proposal[] = [
     status: "pending",
     createdAt: "2025-05-13T15:30:00Z",
     isInline: true,
+    diffType: "inline",
     originalText: "steady state error",
     suggestedText: "steady-state error",
   },
@@ -279,6 +282,7 @@ export const MOCK_PROPOSALS_INIT: Proposal[] = [
     status: "approved",
     createdAt: "2025-05-12T16:00:00Z",
     isInline: false,
+    diffType: "full-doc",
   },
   {
     id: "proposal-4",
@@ -291,6 +295,7 @@ export const MOCK_PROPOSALS_INIT: Proposal[] = [
     rejectionReason: "Meta is the correct current company name.",
     createdAt: "2025-05-12T17:00:00Z",
     isInline: true,
+    diffType: "inline",
     originalText: "Meta",
     suggestedText: "Facebook",
   },
