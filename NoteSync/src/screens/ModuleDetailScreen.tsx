@@ -33,7 +33,11 @@ const LectureCard: React.FC<LectureCardProps> = ({ note, onClick }) => (
           <Ionicons name="lock-closed" size={14} color={C.textMuted} />
         )}
         {note.pendingProposalCount > 0 && (
-          <Badge label={`${note.pendingProposalCount} pending`} color="warning" small />
+          <Badge
+            label={`${note.pendingProposalCount} pending`}
+            color="warning"
+            small
+          />
         )}
       </View>
     </View>
@@ -74,9 +78,12 @@ export const ModuleDetailScreen: React.FC<ModuleDetailScreenProps> = ({
         sub={mod?.code}
         onBack={onBack}
         right={
-          user.role === "lecturer" && (
-            <Btn size="sm" onPress={() => navigate("createNote", { moduleId: id })}>
-              + Note
+          true && (
+            <Btn
+              size="sm"
+              onPress={() => navigate("createNote", { moduleId: id })}
+            >
+              {user.role === "lecturer" ? "+ Note" : "Submit Note"}
             </Btn>
           )
         }
@@ -102,7 +109,7 @@ export const ModuleDetailScreen: React.FC<ModuleDetailScreenProps> = ({
           )}
         </View>
       </ScrollView>
-      {user.role === "lecturer" && (
+      {true && (
         <TouchableOpacity
           onPress={() => navigate("createNote", { moduleId: id })}
           style={styles.fab}

@@ -88,11 +88,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ user, navigate }) => {
         title="My Modules"
         right={
           user.role === "lecturer" ? (
-            <Btn size="sm" onPress={() => setCreateSheet(true)}>
-              + New Module
-            </Btn>
+            <View style={styles.headerActions}>
+              <Btn
+                size="sm"
+                variant="secondary"
+                onPress={() => navigate("reviewQueue")}
+              >
+                Review Queue
+              </Btn>
+              <Btn size="sm" onPress={() => setCreateSheet(true)}>
+                + New Module
+              </Btn>
+            </View>
           ) : (
-            <Btn size="sm" variant="secondary" onPress={() => setJoinSheet(true)}>
+            <Btn
+              size="sm"
+              variant="secondary"
+              onPress={() => setJoinSheet(true)}
+            >
               Join Module
             </Btn>
           )
@@ -121,7 +134,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ user, navigate }) => {
         </View>
       </ScrollView>
 
-      <Sheet open={joinSheet} onClose={() => setJoinSheet(false)} title="Join a Module">
+      <Sheet
+        open={joinSheet}
+        onClose={() => setJoinSheet(false)}
+        title="Join a Module"
+      >
         <Text style={styles.sheetText}>
           Enter the 6-character enrolment code from your lecturer.
         </Text>
@@ -136,10 +153,22 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ user, navigate }) => {
         </Btn>
       </Sheet>
 
-      <Sheet open={createSheet} onClose={() => setCreateSheet(false)} title="Create Module">
-        <Input value={moduleName} onChangeText={setModuleName} placeholder="Module Name" />
+      <Sheet
+        open={createSheet}
+        onClose={() => setCreateSheet(false)}
+        title="Create Module"
+      >
+        <Input
+          value={moduleName}
+          onChangeText={setModuleName}
+          placeholder="Module Name"
+        />
         <View style={{ height: 10 }} />
-        <Input value={moduleCode} onChangeText={setModuleCode} placeholder="Module Code (e.g. CS301)" />
+        <Input
+          value={moduleCode}
+          onChangeText={setModuleCode}
+          placeholder="Module Code (e.g. CS301)"
+        />
         <View style={{ height: 14 }} />
         <Btn onPress={handleCreate} full disabled={!moduleName || !moduleCode}>
           Create Module
@@ -163,6 +192,11 @@ const styles = StyleSheet.create({
   moduleList: {
     padding: 16,
     gap: 12,
+  },
+  headerActions: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
   },
   moduleCard: {
     backgroundColor: C.surface,

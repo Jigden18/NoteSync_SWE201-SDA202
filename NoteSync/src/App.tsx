@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { StyleSheet } from "react-native";
+import { StyleSheet, View, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { NavigationContainer } from "@react-navigation/native";
@@ -27,6 +27,7 @@ import { AnalyticsScreen } from "./screens/AnalyticsScreen";
 import { SearchScreen } from "./screens/SearchScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
 import { ProfileScreen } from "./screens/ProfileScreen";
+import { ProposalReviewQueueScreen } from "./screens/ProposalReviewQueueScreen";
 import { C } from "./constants/colors";
 import { registerForPushNotificationsAsync } from "./utils/pushNotifications";
 import { resolveNotificationRoute } from "./utils/notificationRouting";
@@ -49,6 +50,7 @@ type RootStackParamList = {
   Annotations: { noteId: string };
   CreateNote: { moduleId: string };
   Analytics: { moduleId: string };
+  ReviewQueue: undefined;
 };
 
 type ScreenName =
@@ -59,7 +61,8 @@ type ScreenName =
   | "export"
   | "annotations"
   | "createNote"
-  | "analytics";
+  | "analytics"
+  | "reviewQueue";
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -73,6 +76,7 @@ const screenMap: Record<ScreenName, keyof RootStackParamList> = {
   annotations: "Annotations",
   createNote: "CreateNote",
   analytics: "Analytics",
+  reviewQueue: "ReviewQueue",
 };
 
 export default function App() {
@@ -222,6 +226,7 @@ export default function App() {
               {({ navigation, route }) => (
                 <CreateNoteScreen
                   moduleId={route.params.moduleId}
+                  user={user}
                   onBack={() => navigation.goBack()}
                 />
               )}
@@ -233,6 +238,23 @@ export default function App() {
                   onBack={() => navigation.goBack()}
                 />
               )}
+            </Stack.Screen>
+            <Stack.Screen name="ReviewQueue">
+              {({ navigation }) =>
+                user.role === "lecturer" ? (
+                  <ProposalReviewQueueScreen
+                    user={user}
+                    onBack={() => navigation.goBack()}
+                  />
+                ) : (
+                  <View style={styles.blockedScreen}>
+                    <Text style={styles.blockedTitle}>Access denied</Text>
+                    <Text style={styles.blockedText}>
+                      Only lecturers can review proposals.
+                    </Text>
+                  </View>
+                )
+              }
             </Stack.Screen>
           </Stack.Navigator>
         </NavigationContainer>
@@ -308,5 +330,25 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: "#FAFAFA",
+  },
+  blockedScreen: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    backgroundColor: C.bg,
+  },
+  blockedTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: C.textPrimary,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  blockedText: {
+    fontSize: 14,
+    color: C.textSecondary,
+    textAlign: "center",
+    lineHeight: 20,
   },
 });

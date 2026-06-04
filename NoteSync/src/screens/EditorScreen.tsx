@@ -82,6 +82,8 @@ const buildProposalDraft = (
   return {
     summary: "Full-document revision submitted",
     isInline: false,
+    originalText: base,
+    suggestedText: next,
   };
 };
 

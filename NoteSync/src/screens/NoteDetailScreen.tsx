@@ -261,7 +261,11 @@ interface ProposalsTabProps {
 }
 
 const ProposalsTab: React.FC<ProposalsTabProps> = ({ note, user }) => {
-  const { getProposalsForNote, proposals: allProposals } = useNoteData();
+  const {
+    getProposalsForNote,
+    proposals: allProposals,
+    setProposalStatus,
+  } = useNoteData();
   const [proposals, setProposals] = useState<Proposal[] | null>(null);
   const [filter, setFilter] = useState<
     "all" | "pending" | "approved" | "rejected"
@@ -299,6 +303,7 @@ const ProposalsTab: React.FC<ProposalsTabProps> = ({ note, user }) => {
 
   const handleApprove = async (id: string) => {
     await delay(300);
+    setProposalStatus(id, "approved");
     setProposals(
       (ps) =>
         ps?.map((p) => (p.id === id ? { ...p, status: "approved" } : p)) ||
@@ -309,6 +314,7 @@ const ProposalsTab: React.FC<ProposalsTabProps> = ({ note, user }) => {
 
   const handleReject = async () => {
     await delay(300);
+    setProposalStatus(rejectSheet || "", "rejected", reason);
     setProposals(
       (ps) =>
         ps?.map((p) =>

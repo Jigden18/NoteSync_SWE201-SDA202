@@ -29,6 +29,11 @@ interface NoteDataContextValue {
       suggestedText?: string;
     },
   ) => Proposal;
+  setProposalStatus: (
+    proposalId: string,
+    status: Proposal["status"],
+    rejectionReason?: string,
+  ) => Proposal | undefined;
   proposalToast: { noteId: string; message: string } | null;
   clearProposalToast: () => void;
 }
@@ -144,6 +149,53 @@ export const NoteDataProvider: React.FC<{ children: React.ReactNode }> = ({
     return newProposal;
   };
 
+  const setProposalStatus = (
+    proposalId: string,
+    status: Proposal["status"],
+    rejectionReason?: string,
+  ) => {
+    let updatedProposal: Proposal | undefined;
+
+    setProposals((prevProposals) =>
+      prevProposals.map((proposal) => {
+        if (proposal.id !== proposalId) {
+          return proposal;
+        }
+
+        updatedProposal = {
+          ...proposal,
+          status,
+          rejectionReason,
+        };
+
+        return updatedProposal;
+      }),
+    );
+
+    setNotes((prevNotes) =>
+      prevNotes.map((note) => {
+        if (!updatedProposal || note.id !== updatedProposal.noteId) {
+          return note;
+        }
+
+        const wasPending = proposals.some(
+          (proposal) =>
+            proposal.id === proposalId && proposal.status === "pending",
+        );
+        const shouldDecrement = wasPending && status !== "pending";
+
+        return shouldDecrement
+          ? {
+              ...note,
+              pendingProposalCount: Math.max(note.pendingProposalCount - 1, 0),
+            }
+          : note;
+      }),
+    );
+
+    return updatedProposal;
+  };
+
   const clearProposalToast = () => {
     setProposalToast(null);
   };
@@ -162,6 +214,7 @@ export const NoteDataProvider: React.FC<{ children: React.ReactNode }> = ({
         getProposalsForNote,
         createVersion,
         createProposal,
+        setProposalStatus,
         proposalToast,
         clearProposalToast,
       }}

@@ -13,13 +13,19 @@ import { Header } from "../components/layout/Header";
 import { Btn } from "../components/ui/Btn";
 import { Input } from "../components/ui/Input";
 import { Toast } from "../components/ui/Toast";
+import { User } from "../utils/helpers";
 
 interface CreateNoteScreenProps {
   moduleId: string;
+  user: User;
   onBack: () => void;
 }
 
-export const CreateNoteScreen: React.FC<CreateNoteScreenProps> = ({ moduleId, onBack }) => {
+export const CreateNoteScreen: React.FC<CreateNoteScreenProps> = ({
+  moduleId,
+  user,
+  onBack,
+}) => {
   const [title, setTitle] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [content, setContent] = useState("");
@@ -30,7 +36,11 @@ export const CreateNoteScreen: React.FC<CreateNoteScreenProps> = ({ moduleId, on
     setLoading(true);
     await delay(600);
     setLoading(false);
-    setToast("Note published!");
+    setToast(
+      user.role === "lecturer"
+        ? "Note published!"
+        : "Note submitted for review.",
+    );
     setTimeout(() => {
       setToast("");
       onBack();
@@ -39,7 +49,12 @@ export const CreateNoteScreen: React.FC<CreateNoteScreenProps> = ({ moduleId, on
 
   return (
     <View style={styles.container}>
-      <Header title="New Lecture Note" onBack={onBack} />
+      <Header
+        title={
+          user.role === "lecturer" ? "New Lecture Note" : "Submit Note Draft"
+        }
+        onBack={onBack}
+      />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.label}>TITLE</Text>
@@ -70,7 +85,13 @@ export const CreateNoteScreen: React.FC<CreateNoteScreenProps> = ({ moduleId, on
 
         <View style={{ height: 16 }} />
         <Btn onPress={handleCreate} full disabled={!title || loading}>
-          {loading ? "Publishing…" : "Publish Note"}
+          {loading
+            ? user.role === "lecturer"
+              ? "Publishing…"
+              : "Submitting…"
+            : user.role === "lecturer"
+              ? "Publish Note"
+              : "Submit for Review"}
         </Btn>
       </ScrollView>
 
