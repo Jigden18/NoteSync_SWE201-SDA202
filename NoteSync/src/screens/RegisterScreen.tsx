@@ -10,7 +10,7 @@ import {
   Alert,
 } from "react-native";
 import { C } from "../constants/colors";
-import { delay } from "../utils/helpers";
+import { delay, avatarColor } from "../utils/helpers";
 import { Btn } from "../components/ui/Btn";
 import { Input } from "../components/ui/Input";
 import { Ionicons } from "@expo/vector-icons";
@@ -57,12 +57,14 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
     await delay(800);
     
     // Create student user object
+    const namePart = email.split('@')[0];
     const newUser = {
       id: studentId,
       email: email,
       role: "student",
       studentId: studentId,
-      name: email.split('@')[0], // Use part of email as name
+      fullName: namePart, // Use part of email as name (fixing name to fullName)
+      avatarColor: avatarColor(namePart), // Add required avatarColor
     };
     
     setLoading(false);
@@ -70,7 +72,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
     Alert.alert(
       "Registration Successful!",
       `Your student account has been created. You can now login with your Student ID or Email.`,
-      [{ text: "Go to Login", onPress: () => onBackToLogin() }]
+      [{ text: "Go to Login", onPress: () => onRegister(newUser) }]
     );
   };
 
