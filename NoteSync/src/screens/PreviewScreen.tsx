@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -7,9 +7,11 @@ import {
   Image,
   TouchableOpacity,
   Linking,
+  Modal as RNModal,
+  Clipboard,
 } from "react-native";
 import { C } from "../constants/colors";
-import { delay, User } from "../utils/helpers";
+import { delay } from "../utils/helpers";
 import { useNoteData } from "../contexts/NoteDataContext";
 import { Header } from "../components/layout/Header";
 import { Btn } from "../components/ui/Btn";
@@ -24,7 +26,7 @@ interface PreviewScreenProps {
 }
 
 // Simple markdown parser for preview
-const parseMarkdown = (text: string) => {
+const parseMarkdown = (text: string, onImagePress: (url: string) => void) => {
   const elements: React.ReactNode[] = [];
   const lines = text.split("\n");
   let key = 0;
@@ -35,7 +37,7 @@ const parseMarkdown = (text: string) => {
     // H1
     if (line.startsWith("# ")) {
       elements.push(
-        <Text key={key++} style={styles.h1}>
+        <Text key={key++} style={styles.h1} selectable={true}>
           {line.slice(2)}
         </Text>
       );
@@ -43,7 +45,7 @@ const parseMarkdown = (text: string) => {
     // H2
     else if (line.startsWith("## ")) {
       elements.push(
-        <Text key={key++} style={styles.h2}>
+        <Text key={key++} style={styles.h2} selectable={true}>
           {line.slice(3)}
         </Text>
       );
@@ -52,8 +54,8 @@ const parseMarkdown = (text: string) => {
     else if (line.trim().startsWith("• ")) {
       elements.push(
         <View key={key++} style={styles.listItem}>
-          <Text style={styles.listBullet}>•</Text>
-          <Text style={styles.listText}>{line.slice(2).trim()}</Text>
+          <Text style={styles.listBullet} selectable={true}>•</Text>
+          <Text style={styles.listText} selectable={true}>{line.slice(2).trim()}</Text>
         </View>
       );
     }
@@ -63,8 +65,8 @@ const parseMarkdown = (text: string) => {
       if (match) {
         elements.push(
           <View key={key++} style={styles.listItem}>
-            <Text style={styles.listNumber}>{match[1]}.</Text>
-            <Text style={styles.listText}>{match[2]}</Text>
+            <Text style={styles.listNumber} selectable={true}>{match[1]}.</Text>
+            <Text style={styles.listText} selectable={true}>{match[2]}</Text>
           </View>
         );
       }
@@ -75,14 +77,21 @@ const parseMarkdown = (text: string) => {
       if (imgMatch) {
         imgMatch.forEach((img) => {
           const urlMatch = img.match(/\]\(([^)]+)\)/);
-          const alt = img.match(/!\[([^\]]*)\]/)?.[1] || "Image";
           if (urlMatch?.[1]) {
+            const imageUrl = urlMatch[1];
             elements.push(
-              <Image
+              <TouchableOpacity
                 key={key++}
-                source={{ uri: urlMatch[1] }}
-                style={styles.image}
-              />
+                onPress={() => onImagePress(imageUrl)}
+                activeOpacity={0.9}
+                style={styles.imageContainer}
+              >
+                <Image
+                  source={{ uri: imageUrl }}
+                  style={styles.image}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
             );
           }
         });
@@ -93,7 +102,7 @@ const parseMarkdown = (text: string) => {
       // Parse inline elements
       const parts = parseInlineElements(line);
       elements.push(
-        <Text key={key++} style={styles.paragraph}>
+        <Text key={key++} style={styles.paragraph} selectable={true}>
           {parts}
         </Text>
       );
@@ -116,7 +125,7 @@ const parseInlineElements = (text: string) => {
       result.push(text.slice(current, boldMatch.index));
     }
     result.push(
-      <Text key={`bold-${key++}`} style={styles.bold}>
+      <Text key={`bold-${key++}`} style={styles.bold} selectable={true}>
         {boldMatch[1]}
       </Text>
     );
@@ -129,7 +138,7 @@ const parseInlineElements = (text: string) => {
   while ((italicMatch = italicRegex.exec(text)) !== null) {
     if (italicMatch.index >= current) {
       result.push(
-        <Text key={`italic-${key++}`} style={styles.italic}>
+        <Text key={`italic-${key++}`} style={styles.italic} selectable={true}>
           {italicMatch[1]}
         </Text>
       );
@@ -143,7 +152,7 @@ const parseInlineElements = (text: string) => {
   while ((underlineMatch = underlineRegex.exec(text)) !== null) {
     if (underlineMatch.index >= current) {
       result.push(
-        <Text key={`underline-${key++}`} style={styles.underline}>
+        <Text key={`underline-${key++}`} style={styles.underline} selectable={true}>
           {underlineMatch[1]}
         </Text>
       );
@@ -156,13 +165,16 @@ const parseInlineElements = (text: string) => {
   let linkMatch: RegExpExecArray | null;
   while ((linkMatch = linkRegex.exec(text)) !== null) {
     if (linkMatch.index >= current) {
+      const url = linkMatch[2];
+      const linkText = linkMatch[1];
       result.push(
         <Text
           key={`link-${key++}`}
           style={styles.link}
-          onPress={() => Linking.openURL(linkMatch![2])}
+          onPress={() => Linking.openURL(url)}
+          selectable={true}
         >
-          {linkMatch[1]}
+          {linkText}
         </Text>
       );
       current = linkRegex.lastIndex;
@@ -184,10 +196,71 @@ export const PreviewScreen: React.FC<PreviewScreenProps> = ({
   onSubmit,
 }) => {
   const { createVersion } = useNoteData();
-  const [loading, setLoading] = React.useState(false);
-  const [toast, setToast] = React.useState("");
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState("");
+  const [activeImageUrl, setActiveImageUrl] = useState<string | null>(null);
 
-  const parsedContent = useMemo(() => parseMarkdown(content), [content]);
+  const [scale, setScale] = useState(1);
+  const [lastTouchDistance, setLastTouchDistance] = useState<number | null>(null);
+  const [lastTap, setLastTap] = useState(0);
+
+  const parsedContent = useMemo(() => {
+    return parseMarkdown(content, (url) => {
+      setScale(1);
+      setActiveImageUrl(url);
+    });
+  }, [content]);
+
+  const handleTouchStart = (event: any) => {
+    const touches = event.nativeEvent.touches;
+    if (touches.length === 2) {
+      const x1 = touches[0].pageX;
+      const y1 = touches[0].pageY;
+      const x2 = touches[1].pageX;
+      const y2 = touches[1].pageY;
+      const distance = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+      setLastTouchDistance(distance);
+    }
+  };
+
+  const handleTouchMove = (event: any) => {
+    const touches = event.nativeEvent.touches;
+    if (touches.length === 2 && lastTouchDistance !== null) {
+      const x1 = touches[0].pageX;
+      const y1 = touches[0].pageY;
+      const x2 = touches[1].pageX;
+      const y2 = touches[1].pageY;
+      const distance = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+      
+      if (distance > 0) {
+        const factor = distance / lastTouchDistance;
+        setScale((prevScale) => Math.max(1, Math.min(prevScale * factor, 5)));
+        setLastTouchDistance(distance);
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setLastTouchDistance(null);
+  };
+
+  const handleDoubleTap = () => {
+    const now = Date.now();
+    if (now - lastTap < 300) {
+      setScale((prevScale) => (prevScale > 1 ? 1 : 2.5));
+    }
+    setLastTap(now);
+  };
+
+  const handleCopyImageLink = () => {
+    if (activeImageUrl) {
+      Clipboard.setString(activeImageUrl);
+      setToast("Image copied ✓");
+      setTimeout(() => {
+        setActiveImageUrl(null);
+      }, 800);
+    }
+  };
 
   const handleSubmit = async () => {
     setLoading(true);
@@ -220,6 +293,50 @@ export const PreviewScreen: React.FC<PreviewScreenProps> = ({
       </View>
 
       {toast && <Toast msg={toast} onClose={() => setToast("")} />}
+
+      {/* Image Popup Modal */}
+      <RNModal
+        visible={!!activeImageUrl}
+        transparent={true}
+        onRequestClose={() => setActiveImageUrl(null)}
+        animationType="fade"
+      >
+        <View style={styles.modalOverlay}>
+          <View 
+            style={styles.modalContent}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            {activeImageUrl && (
+              <TouchableOpacity
+                activeOpacity={1}
+                onPress={handleDoubleTap}
+                style={styles.zoomImageContainer}
+              >
+                <Image
+                  source={{ uri: activeImageUrl }}
+                  style={[styles.fullImage, { transform: [{ scale }] }]}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.closeBtn}
+              onPress={() => setActiveImageUrl(null)}
+            >
+              <Ionicons name="close-circle" size={40} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.copyBtn}
+              onPress={handleCopyImageLink}
+            >
+              <Ionicons name="copy" size={20} color="#fff" />
+              <Text style={styles.btnText}>Copy</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </RNModal>
     </View>
   );
 };
@@ -301,12 +418,15 @@ const styles = StyleSheet.create({
     color: C.textPrimary,
     flex: 1,
   },
+  imageContainer: {
+    width: "100%",
+    marginVertical: 12,
+    borderRadius: 10,
+    overflow: "hidden",
+  },
   image: {
     width: "100%",
     height: 200,
-    borderRadius: 10,
-    marginVertical: 12,
-    backgroundColor: C.border,
   },
   footer: {
     paddingHorizontal: 16,
@@ -314,5 +434,49 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: C.border,
     backgroundColor: C.bg,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.95)",
+  },
+  modalContent: {
+    flex: 1,
+    position: "relative",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  zoomImageContainer: {
+    width: "85%",
+    height: "80%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  fullImage: {
+    width: "100%",
+    height: "100%",
+  },
+  closeBtn: {
+    position: "absolute",
+    top: 40,
+    right: 20,
+    zIndex: 10,
+  },
+  copyBtn: {
+    position: "absolute",
+    bottom: 40,
+    alignSelf: "center",
+    backgroundColor: "rgba(76, 175, 80, 0.85)",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    zIndex: 10,
+  },
+  btnText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

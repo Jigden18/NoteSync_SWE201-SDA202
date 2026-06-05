@@ -66,7 +66,9 @@ type ScreenName =
   | "annotations"
   | "createNote"
   | "analytics"
-  | "reviewQueue";
+  | "reviewQueue"
+  | "Preview"
+  | "preview";
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -81,6 +83,8 @@ const screenMap: Record<ScreenName, keyof RootStackParamList> = {
   createNote: "CreateNote",
   analytics: "Analytics",
   reviewQueue: "ReviewQueue",
+  Preview: "Preview",
+  preview: "Preview",
 };
 
 export default function App() {
@@ -283,10 +287,10 @@ export default function App() {
                 )
               }
             </Stack.Screen>
-          </Stack.Navigator>
-        </NavigationContainer>
-      </NoteDataProvider>
-    </SafeAreaView>
+            </Stack.Navigator>
+          </NavigationContainer>
+        </NoteDataProvider>
+      </SafeAreaView>
   );
 }
 

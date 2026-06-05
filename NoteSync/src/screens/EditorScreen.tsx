@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   TextInput,
   Platform,
+  Clipboard,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { C } from "../constants/colors";
@@ -104,6 +105,7 @@ const TOOLS = [
   { label: "1. List", style: "number" },
   { icon: "link", label: "Link", style: "link" },
   { icon: "image", label: "Image", style: "image" },
+  { icon: "clipboard-outline", label: "Paste Img", style: "paste_image" },
 ];
 
 export const EditorScreen: React.FC<EditorScreenProps> = ({
@@ -120,6 +122,8 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
   const [linkSheet, setLinkSheet] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [linkText, setLinkText] = useState("");
+  const [pasteSheet, setPasteSheet] = useState(false);
+  const [pasteImageUrl, setPasteImageUrl] = useState("");
   const [toast, setToast] = useState("");
   const baseContent = version
     ? normalizeText(version.content.replace(/<[^>]+>/g, " "))
@@ -200,6 +204,29 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
     }
   };
 
+  const handlePasteImage = async () => {
+    const clipboardText = await Clipboard.getString();
+    if (!clipboardText.trim()) {
+      setToast("Nothing to paste. Copy an image URL first.");
+      return;
+    }
+
+    // Check if clipboard contains an image URL
+    const isImageUrl = /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp|bmp)(\?.*)?$/i.test(
+      clipboardText.trim(),
+    );
+
+    if (isImageUrl) {
+      // Directly insert the image from clipboard
+      insertAtCursor(`![Pasted Image](${clipboardText.trim()})`);
+      setToast("Image inserted ✓");
+    } else {
+      // Open the paste sheet if it's not a direct URL
+      setPasteImageUrl(clipboardText.trim());
+      setPasteSheet(true);
+    }
+  };
+
   const applyFormatting = (style: string) => {
     const start = Math.min(selection.start, selection.end);
     const end = Math.max(selection.start, selection.end);
@@ -239,6 +266,9 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
         return;
       case "image":
         pickImage();
+        return;
+      case "paste_image":
+        handlePasteImage();
         return;
       default:
         formatted = selectedText;
@@ -331,6 +361,39 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
         </Btn>
       </Sheet>
 
+      {/* Paste Image Sheet */}
+      <Sheet
+        open={pasteSheet}
+        onClose={() => {
+          setPasteSheet(false);
+          setPasteImageUrl("");
+        }}
+        title="Paste Image URL"
+        half
+      >
+        <Text style={styles.sheetDesc}>
+          Paste the image URL below to insert it into your note.
+        </Text>
+        <View style={{ height: 12 }} />
+        <Input
+          value={pasteImageUrl}
+          onChangeText={setPasteImageUrl}
+          placeholder="https://example.com/image.jpg"
+        />
+        <View style={{ height: 14 }} />
+        <Btn onPress={() => {
+          const url = pasteImageUrl.trim();
+          if (url) {
+            insertAtCursor(`![Pasted Image](${url})`);
+            setPasteImageUrl("");
+            setPasteSheet(false);
+            setToast("Image inserted ✓");
+          }
+        }} full disabled={!pasteImageUrl}>
+          Insert Image
+        </Btn>
+      </Sheet>
+
       {toast && <Toast msg={toast} onClose={() => setToast("")} />}
     </View>
   );
@@ -396,5 +459,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: C.border,
+  },
+  sheetDesc: {
+    fontSize: 13,
+    color: C.textMuted,
+    marginBottom: 8,
   },
 });
