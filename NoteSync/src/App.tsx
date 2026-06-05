@@ -14,6 +14,7 @@ import { MOCK_NOTIFICATIONS } from "./data/mockData";
 import { User } from "./utils/helpers";
 import { NoteDataProvider } from "./contexts/NoteDataContext";
 import { LoginScreen } from "./screens/LoginScreen";
+import { RegisterScreen } from "./screens/RegisterScreen"; // Add this import
 import { HomeScreen } from "./screens/HomeScreen";
 import { ModuleDetailScreen } from "./screens/ModuleDetailScreen";
 import { NoteDetailScreen } from "./screens/NoteDetailScreen";
@@ -84,6 +85,7 @@ const screenMap: Record<ScreenName, keyof RootStackParamList> = {
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [showRegister, setShowRegister] = useState(false); // Add this state
   const navigationRef = useRef<any>(null);
 
   useEffect(() => {
@@ -131,8 +133,28 @@ export default function App() {
     };
   }, []);
 
+  // Add registration handler
+  const handleRegister = (userData: User) => {
+    setUser(userData);
+    setShowRegister(false);
+  };
+
+  // Show register screen
+  if (showRegister) {
+    return (
+      <RegisterScreen 
+        onRegister={handleRegister}
+        onBackToLogin={() => setShowRegister(false)}
+      />
+    );
+  }
+
+  // Show login screen
   if (!user) {
-    return <LoginScreen onLogin={(u) => setUser(u)} />;
+    return <LoginScreen 
+      onLogin={(u) => setUser(u)} 
+      onRegisterPress={() => setShowRegister(true)} // Add this prop
+    />;
   }
 
   const unreadCount = MOCK_NOTIFICATIONS.filter((n) => !n.read).length;
