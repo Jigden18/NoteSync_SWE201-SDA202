@@ -25,6 +25,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "55bf0936-5e3b-4bde-bd4d-c64440b4d52c"
+      }
+    },
+    "owner": "gayley"
   }
 }

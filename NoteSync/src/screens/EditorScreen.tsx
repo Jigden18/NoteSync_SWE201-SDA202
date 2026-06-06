@@ -6,13 +6,13 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Platform,
   Clipboard,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { C } from "../constants/colors";
-import { delay, User } from "../utils/helpers";
+import { useAuth } from "../contexts/AuthContext";
 import { useNoteData } from "../contexts/NoteDataContext";
+import { apiFetch } from "../api/client";
 import { Header } from "../components/layout/Header";
 import { Btn } from "../components/ui/Btn";
 import { Input } from "../components/ui/Input";
@@ -20,43 +20,21 @@ import { Sheet } from "../components/ui/Sheet";
 import { Toast } from "../components/ui/Toast";
 import { Ionicons } from "@expo/vector-icons";
 
-type ProposalDraft = {
-  summary: string;
-  isInline: boolean;
-  originalText?: string;
-  suggestedText?: string;
-};
-
 const normalizeText = (text: string) => text.replace(/\s+/g, " ").trim();
 
-const buildProposalDraft = (
-  baseText: string,
-  nextText: string,
-): ProposalDraft | null => {
+const buildProposalDraft = (baseText: string, nextText: string) => {
   const base = normalizeText(baseText);
   const next = normalizeText(nextText);
-
-  if (!base || base === next) {
-    return null;
-  }
+  if (!base || base === next) return null;
 
   let prefix = 0;
-  while (
-    prefix < base.length &&
-    prefix < next.length &&
-    base[prefix] === next[prefix]
-  ) {
-    prefix += 1;
-  }
-
+  while (prefix < base.length && prefix < next.length && base[prefix] === next[prefix]) prefix++;
   let suffix = 0;
   while (
     suffix < base.length - prefix &&
     suffix < next.length - prefix &&
     base[base.length - 1 - suffix] === next[next.length - 1 - suffix]
-  ) {
-    suffix += 1;
-  }
+  ) suffix++;
 
   const originalText = base.slice(prefix, base.length - suffix).trim();
   const suggestedText = next.slice(prefix, next.length - suffix).trim();
@@ -65,32 +43,19 @@ const buildProposalDraft = (
   const isInline = changeSize > 0 && changeSize <= 140 && changeShare <= 0.35;
 
   if (isInline) {
-    const summary =
-      originalText && suggestedText
-        ? `Update: ${originalText.slice(0, 40)}${originalText.length > 40 ? "..." : ""}`
-        : originalText
-          ? `Remove: ${originalText.slice(0, 40)}${originalText.length > 40 ? "..." : ""}`
-          : `Add: ${suggestedText.slice(0, 40)}${suggestedText.length > 40 ? "..." : ""}`;
-
-    return {
-      summary,
-      isInline: true,
-      originalText: originalText || undefined,
-      suggestedText: suggestedText || undefined,
-    };
+    const summary = originalText && suggestedText
+      ? `Update: ${originalText.slice(0, 40)}${originalText.length > 40 ? "..." : ""}`
+      : originalText
+        ? `Remove: ${originalText.slice(0, 40)}${originalText.length > 40 ? "..." : ""}`
+        : `Add: ${suggestedText.slice(0, 40)}${suggestedText.length > 40 ? "..." : ""}`;
+    return { summary, isInline: true, originalText: originalText || undefined, suggestedText: suggestedText || undefined };
   }
 
-  return {
-    summary: "Full-document revision submitted",
-    isInline: false,
-    originalText: base,
-    suggestedText: next,
-  };
+  return { summary: "Full-document revision submitted", isInline: false, originalText: base, suggestedText: next };
 };
 
 interface EditorScreenProps {
   noteId: string;
-  user: User;
   navigate: (screen: string, params?: any) => void;
   onBack: () => void;
 }
@@ -108,15 +73,11 @@ const TOOLS = [
   { icon: "clipboard-outline", label: "Paste Img", style: "paste_image" },
 ];
 
-export const EditorScreen: React.FC<EditorScreenProps> = ({
-  noteId,
-  user,
-  navigate,
-  onBack,
-}) => {
-  const { getNote, getVersion, createProposal } = useNoteData();
-  const note = getNote(noteId);
-  const version = note ? getVersion(note.currentVersionId) : undefined;
+export const EditorScreen: React.FC<EditorScreenProps> = ({ noteId, navigate, onBack }) => {
+  const { user } = useAuth();
+  const { setProposalToast } = useNoteData();
+  const [note, setNote] = useState<{ id: string; currentVersionId: string | null; isLocked: boolean } | null>(null);
+  const [baseContent, setBaseContent] = useState("");
   const [content, setContent] = useState("");
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const [linkSheet, setLinkSheet] = useState(false);
@@ -125,182 +86,95 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
   const [pasteSheet, setPasteSheet] = useState(false);
   const [pasteImageUrl, setPasteImageUrl] = useState("");
   const [toast, setToast] = useState("");
-  const baseContent = version
-    ? normalizeText(version.content.replace(/<[^>]+>/g, " "))
-    : "";
 
   useEffect(() => {
-    if (version) {
-      // Strip HTML tags for plain text editing in React Native
-      const plainText = version.content.replace(/<[^>]+>/g, " ");
-      setContent(plainText);
-    }
-  }, [version]);
+    apiFetch<any>(`/api/notes/${noteId}`).then((data) => {
+      setNote(data);
+      const plain = (data.currentVersion?.content || "").replace(/<[^>]+>/g, " ");
+      setBaseContent(normalizeText(plain));
+      setContent(plain);
+    }).catch(() => setToast("Failed to load note"));
+  }, [noteId]);
 
-  const handlePreview = () => {
-    navigate("Preview", { noteId, content });
-  };
+  const handlePreview = () => navigate("Preview", { noteId, content });
 
-  const handleSubmitProposal = () => {
-    if (!version || !note) {
-      setToast("Unable to submit proposal right now.");
-      return;
-    }
-
+  const handleSubmitProposal = async () => {
+    if (!note?.currentVersionId) { setToast("Unable to submit proposal."); return; }
     const draft = buildProposalDraft(baseContent, content);
-    if (!draft) {
-      setToast("Make a change before submitting a proposal.");
-      return;
+    if (!draft) { setToast("Make a change before submitting."); return; }
+
+    try {
+      const endpoint = draft.isInline ? `/api/notes/${noteId}/proposals/inline` : `/api/notes/${noteId}/proposals`;
+      await apiFetch(endpoint, {
+        method: "POST",
+        body: JSON.stringify({
+          baseVersionId: note.currentVersionId,
+          proposedContent: content,
+          summary: draft.summary,
+          originalText: draft.originalText,
+          suggestedText: draft.suggestedText,
+        }),
+      });
+      setProposalToast({ noteId, message: "Proposal submitted successfully." });
+      onBack();
+    } catch (e: any) {
+      setToast(e.message || "Failed to submit proposal");
     }
-
-    createProposal(note.id, user.fullName, draft.summary, {
-      isInline: draft.isInline,
-      originalText: draft.originalText,
-      suggestedText: draft.suggestedText,
-    });
-
-    onBack();
   };
 
   const insertAtCursor = (inserted: string) => {
     const start = Math.min(selection.start, selection.end);
     const end = Math.max(selection.start, selection.end);
-    const next = `${content.slice(0, start)}${inserted}${content.slice(end)}`;
-    setContent(next);
+    setContent(`${content.slice(0, start)}${inserted}${content.slice(end)}`);
     const pos = start + inserted.length;
     setSelection({ start: pos, end: pos });
   };
 
   const insertLink = () => {
     const url = linkUrl.trim();
-    if (!url) {
-      setToast("Paste a valid link first.");
-      return;
-    }
-    const text = linkText.trim() || url;
-    insertAtCursor(`[${text}](${url})`);
-    setLinkUrl("");
-    setLinkText("");
-    setLinkSheet(false);
+    if (!url) { setToast("Paste a valid link first."); return; }
+    insertAtCursor(`[${linkText.trim() || url}](${url})`);
+    setLinkUrl(""); setLinkText(""); setLinkSheet(false);
   };
 
   const pickImage = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      setToast("Gallery access is required to insert an image.");
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false,
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      const uri = result.assets?.[0]?.uri;
-      if (uri) {
-        insertAtCursor(`![Image](${uri})`);
-      }
-    }
+    if (!permission.granted) { setToast("Gallery access is required."); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+    if (!result.canceled && result.assets?.[0]?.uri) insertAtCursor(`![Image](${result.assets[0].uri})`);
   };
 
   const handlePasteImage = async () => {
     const clipboardText = await Clipboard.getString();
-    if (!clipboardText.trim()) {
-      setToast("Nothing to paste. Copy an image URL first.");
-      return;
-    }
-
-    // Check if clipboard contains an image URL
-    const isImageUrl = /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp|bmp)(\?.*)?$/i.test(
-      clipboardText.trim(),
-    );
-
-    if (isImageUrl) {
-      // Directly insert the image from clipboard
-      insertAtCursor(`![Pasted Image](${clipboardText.trim()})`);
-      setToast("Image inserted ✓");
-    } else {
-      // Open the paste sheet if it's not a direct URL
-      setPasteImageUrl(clipboardText.trim());
-      setPasteSheet(true);
-    }
+    if (!clipboardText.trim()) { setToast("Nothing to paste. Copy an image URL first."); return; }
+    const isImageUrl = /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp|bmp)(\?.*)?$/i.test(clipboardText.trim());
+    if (isImageUrl) { insertAtCursor(`![Pasted Image](${clipboardText.trim()})`); setToast("Image inserted ✓"); }
+    else { setPasteImageUrl(clipboardText.trim()); setPasteSheet(true); }
   };
 
   const applyFormatting = (style: string) => {
     const start = Math.min(selection.start, selection.end);
     const end = Math.max(selection.start, selection.end);
     const selectedText = content.slice(start, end) || "text";
-
-    let formatted = "";
-    switch (style) {
-      case "bold":
-        formatted = `**${selectedText}**`;
-        break;
-      case "italic":
-        formatted = `*${selectedText}*`;
-        break;
-      case "underline":
-        formatted = `__${selectedText}__`;
-        break;
-      case "h1":
-        formatted = `\n# ${selectedText}\n`;
-        break;
-      case "h2":
-        formatted = `\n## ${selectedText}\n`;
-        break;
-      case "bullet":
-        formatted = `\n• ${selectedText}`;
-        break;
-      case "number":
-        formatted = `\n1. ${selectedText}`;
-        break;
-      case "link":
-        setLinkText(
-          selectedText.startsWith("http")
-            ? selectedText
-            : selectedText || "Link text",
-        );
-        setLinkUrl(selectedText.startsWith("http") ? selectedText : "");
-        setLinkSheet(true);
-        return;
-      case "image":
-        pickImage();
-        return;
-      case "paste_image":
-        handlePasteImage();
-        return;
-      default:
-        formatted = selectedText;
-    }
-
-    insertAtCursor(formatted);
+    const map: Record<string, string> = {
+      bold: `**${selectedText}**`, italic: `*${selectedText}*`, underline: `__${selectedText}__`,
+      h1: `\n# ${selectedText}\n`, h2: `\n## ${selectedText}\n`,
+      bullet: `\n• ${selectedText}`, number: `\n1. ${selectedText}`,
+    };
+    if (style === "link") { setLinkText(selectedText.startsWith("http") ? selectedText : selectedText || "Link text"); setLinkUrl(selectedText.startsWith("http") ? selectedText : ""); setLinkSheet(true); return; }
+    if (style === "image") { pickImage(); return; }
+    if (style === "paste_image") { handlePasteImage(); return; }
+    insertAtCursor(map[style] || selectedText);
   };
 
   return (
     <View style={styles.container}>
       <Header title="Edit Note" onBack={onBack} />
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.toolbar}
-      >
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.toolbar}>
         {TOOLS.map((tool) => (
-          <TouchableOpacity
-            key={tool.label}
-            onPress={() => applyFormatting(tool.style)}
-            style={styles.toolBtn}
-          >
-            {tool.icon ? (
-              <Ionicons
-                name={tool.icon as any}
-                size={16}
-                color={C.textPrimary}
-              />
-            ) : (
-              <Text style={styles.toolText}>{tool.label}</Text>
-            )}
+          <TouchableOpacity key={tool.label} onPress={() => applyFormatting(tool.style)} style={styles.toolBtn}>
+            {tool.icon ? <Ionicons name={tool.icon as any} size={16} color={C.textPrimary} /> : <Text style={styles.toolText}>{tool.label}</Text>}
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -319,79 +193,34 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
             selection={selection}
           />
         </View>
-        <Text style={styles.hint}>
-          Use toolbar buttons for headings, italics, links, and images.
-        </Text>
+        <Text style={styles.hint}>Use toolbar buttons for headings, italics, links, and images.</Text>
       </ScrollView>
 
       <View style={styles.previewRow}>
-        <Btn full onPress={handlePreview} variant="secondary">
-          Preview final note
-        </Btn>
+        <Btn full onPress={handlePreview} variant="secondary">Preview final note</Btn>
         <View style={{ height: 10 }} />
-        <Btn
-          full
-          onPress={handleSubmitProposal}
-          disabled={!content.trim() || normalizeText(content) === baseContent}
-        >
+        <Btn full onPress={handleSubmitProposal} disabled={!content.trim() || normalizeText(content) === baseContent}>
           Propose changes
         </Btn>
       </View>
 
-      <Sheet
-        open={linkSheet}
-        onClose={() => setLinkSheet(false)}
-        title="Insert link"
-        half
-      >
-        <Input
-          value={linkText}
-          onChangeText={setLinkText}
-          placeholder="Link text"
-        />
+      <Sheet open={linkSheet} onClose={() => setLinkSheet(false)} title="Insert link" half>
+        <Input value={linkText} onChangeText={setLinkText} placeholder="Link text" />
         <View style={{ height: 12 }} />
-        <Input
-          value={linkUrl}
-          onChangeText={setLinkUrl}
-          placeholder="https://example.com"
-        />
+        <Input value={linkUrl} onChangeText={setLinkUrl} placeholder="https://example.com" />
         <View style={{ height: 14 }} />
-        <Btn onPress={insertLink} full disabled={!linkUrl}>
-          Insert link
-        </Btn>
+        <Btn onPress={insertLink} full disabled={!linkUrl}>Insert link</Btn>
       </Sheet>
 
-      {/* Paste Image Sheet */}
-      <Sheet
-        open={pasteSheet}
-        onClose={() => {
-          setPasteSheet(false);
-          setPasteImageUrl("");
-        }}
-        title="Paste Image URL"
-        half
-      >
-        <Text style={styles.sheetDesc}>
-          Paste the image URL below to insert it into your note.
-        </Text>
+      <Sheet open={pasteSheet} onClose={() => { setPasteSheet(false); setPasteImageUrl(""); }} title="Paste Image URL" half>
+        <Text style={styles.sheetDesc}>Paste the image URL below to insert it into your note.</Text>
         <View style={{ height: 12 }} />
-        <Input
-          value={pasteImageUrl}
-          onChangeText={setPasteImageUrl}
-          placeholder="https://example.com/image.jpg"
-        />
+        <Input value={pasteImageUrl} onChangeText={setPasteImageUrl} placeholder="https://example.com/image.jpg" />
         <View style={{ height: 14 }} />
-        <Btn onPress={() => {
+        <Btn full disabled={!pasteImageUrl} onPress={() => {
           const url = pasteImageUrl.trim();
-          if (url) {
-            insertAtCursor(`![Pasted Image](${url})`);
-            setPasteImageUrl("");
-            setPasteSheet(false);
-            setToast("Image inserted ✓");
-          }
-        }} full disabled={!pasteImageUrl}>
-          Insert Image
-        </Btn>
+          if (url) { insertAtCursor(`![Pasted Image](${url})`); setPasteImageUrl(""); setPasteSheet(false); setToast("Image inserted ✓"); }
+        }}>Insert Image</Btn>
       </Sheet>
 
       {toast && <Toast msg={toast} onClose={() => setToast("")} />}
@@ -400,69 +229,14 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: C.bg,
-  },
-  submitBtn: {
-    color: C.accent,
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  toolbar: {
-    backgroundColor: C.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    flexGrow: 0,
-  },
-  toolBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: C.border,
-    marginHorizontal: 3,
-  },
-  toolText: {
-    fontSize: 12,
-    color: C.textPrimary,
-  },
-  editorContainer: {
-    flex: 1,
-    padding: 20,
-  },
-  editor: {
-    backgroundColor: C.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: C.border,
-    padding: 20,
-    minHeight: 300,
-  },
-  textArea: {
-    fontSize: 15,
-    lineHeight: 26,
-    color: C.textPrimary,
-    textAlignVertical: "top",
-    minHeight: 260,
-  },
-  hint: {
-    fontSize: 12,
-    color: C.textMuted,
-    textAlign: "center",
-    marginTop: 8,
-  },
-  previewRow: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: C.border,
-  },
-  sheetDesc: {
-    fontSize: 13,
-    color: C.textMuted,
-    marginBottom: 8,
-  },
+  container: { flex: 1, backgroundColor: C.bg },
+  toolbar: { backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.border, paddingHorizontal: 12, paddingVertical: 8, flexGrow: 0 },
+  toolBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: C.border, marginHorizontal: 3 },
+  toolText: { fontSize: 12, color: C.textPrimary },
+  editorContainer: { flex: 1, padding: 20 },
+  editor: { backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border, padding: 20, minHeight: 300 },
+  textArea: { fontSize: 15, lineHeight: 26, color: C.textPrimary, textAlignVertical: "top", minHeight: 260 },
+  hint: { fontSize: 12, color: C.textMuted, textAlign: "center", marginTop: 8 },
+  previewRow: { paddingHorizontal: 20, paddingVertical: 12, borderTopWidth: 1, borderTopColor: C.border },
+  sheetDesc: { fontSize: 13, color: C.textMuted, marginBottom: 8 },
 });

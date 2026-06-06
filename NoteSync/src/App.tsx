@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { StyleSheet, View, Text } from "react-native";
+import { StyleSheet, View, Text, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { NavigationContainer } from "@react-navigation/native";
@@ -10,11 +10,10 @@ import {
 } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import * as Notifications from "expo-notifications";
-import { MOCK_NOTIFICATIONS } from "./data/mockData";
-import { User } from "./utils/helpers";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { NoteDataProvider } from "./contexts/NoteDataContext";
 import { LoginScreen } from "./screens/LoginScreen";
-import { RegisterScreen } from "./screens/RegisterScreen"; // Add this import
+import { RegisterScreen } from "./screens/RegisterScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { ModuleDetailScreen } from "./screens/ModuleDetailScreen";
 import { NoteDetailScreen } from "./screens/NoteDetailScreen";
@@ -87,9 +86,9 @@ const screenMap: Record<ScreenName, keyof RootStackParamList> = {
   preview: "Preview",
 };
 
-export default function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [showRegister, setShowRegister] = useState(false); // Add this state
+function AppContent() {
+  const { user, loading, logout, updatePushToken } = useAuth();
+  const [showRegister, setShowRegister] = useState(false);
   const navigationRef = useRef<any>(null);
 
   useEffect(() => {
@@ -97,8 +96,8 @@ export default function App() {
 
     if (canRegisterForRemotePushNotifications()) {
       registerForPushNotificationsAsync().then((token) => {
-        if (isActive && token) {
-          console.log("Expo push token:", token);
+        if (isActive && token && user) {
+          updatePushToken(token).catch(() => {});
         }
       });
     }
@@ -122,7 +121,6 @@ export default function App() {
             response.notification.request.content.data as any,
           )
         : null;
-
       if (route) {
         navigationRef.current?.navigate("Note", {
           id: route.noteId,
@@ -135,33 +133,33 @@ export default function App() {
       isActive = false;
       responseSubscription.remove();
     };
-  }, []);
+  }, [user]);
 
-  // Add registration handler
-  const handleRegister = (userData: User) => {
-    setUser(userData);
-    setShowRegister(false);
-  };
+  if (loading) {
+    return (
+      <View style={styles.loadingScreen}>
+        <ActivityIndicator size="large" color={C.accent} />
+      </View>
+    );
+  }
 
-  // Show register screen
   if (showRegister) {
     return (
-      <RegisterScreen 
-        onRegister={handleRegister}
+      <RegisterScreen
+        onRegister={() => setShowRegister(false)}
         onBackToLogin={() => setShowRegister(false)}
       />
     );
   }
 
-  // Show login screen
   if (!user) {
-    return <LoginScreen 
-      onLogin={(u) => setUser(u)} 
-      onRegisterPress={() => setShowRegister(true)} // Add this prop
-    />;
+    return (
+      <LoginScreen
+        onLogin={() => {}}
+        onRegisterPress={() => setShowRegister(true)}
+      />
+    );
   }
-
-  const unreadCount = MOCK_NOTIFICATIONS.filter((n) => !n.read).length;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -172,9 +170,7 @@ export default function App() {
             <Stack.Screen name="Main">
               {({ navigation }) => (
                 <MainTabs
-                  user={user}
-                  unreadCount={unreadCount}
-                  onLogout={() => setUser(null)}
+                  onLogout={logout}
                   rootNavigation={navigation}
                 />
               )}
@@ -183,7 +179,6 @@ export default function App() {
               {({ navigation, route }) => (
                 <ModuleDetailScreen
                   id={route.params.id}
-                  user={user}
                   navigate={(screen, params) =>
                     navigation.navigate(screenMap[screen as ScreenName], params)
                   }
@@ -195,7 +190,6 @@ export default function App() {
               {({ navigation, route }) => (
                 <NoteDetailScreen
                   id={route.params.id}
-                  user={user}
                   initialTab={route.params.initialTab}
                   navigate={(screen, params) =>
                     navigation.navigate(screenMap[screen as ScreenName], params)
@@ -208,7 +202,6 @@ export default function App() {
               {({ navigation, route }) => (
                 <EditorScreen
                   noteId={route.params.noteId}
-                  user={user}
                   navigate={(screen, params) =>
                     navigation.navigate(screenMap[screen as ScreenName], params)
                   }
@@ -230,7 +223,6 @@ export default function App() {
               {({ navigation, route }) => (
                 <VersionHistoryScreen
                   noteId={route.params.noteId}
-                  user={user}
                   onBack={() => navigation.goBack()}
                 />
               )}
@@ -239,7 +231,6 @@ export default function App() {
               {({ navigation, route }) => (
                 <ExportScreen
                   noteId={route.params.noteId}
-                  user={user}
                   onBack={() => navigation.goBack()}
                 />
               )}
@@ -248,7 +239,6 @@ export default function App() {
               {({ navigation, route }) => (
                 <AnnotationsScreen
                   noteId={route.params.noteId}
-                  user={user}
                   onBack={() => navigation.goBack()}
                 />
               )}
@@ -257,7 +247,6 @@ export default function App() {
               {({ navigation, route }) => (
                 <CreateNoteScreen
                   moduleId={route.params.moduleId}
-                  user={user}
                   onBack={() => navigation.goBack()}
                 />
               )}
@@ -274,7 +263,6 @@ export default function App() {
               {({ navigation }) =>
                 user.role === "lecturer" ? (
                   <ProposalReviewQueueScreen
-                    user={user}
                     onBack={() => navigation.goBack()}
                   />
                 ) : (
@@ -287,24 +275,20 @@ export default function App() {
                 )
               }
             </Stack.Screen>
-            </Stack.Navigator>
-          </NavigationContainer>
-        </NoteDataProvider>
-      </SafeAreaView>
+          </Stack.Navigator>
+        </NavigationContainer>
+      </NoteDataProvider>
+    </SafeAreaView>
   );
 }
 
 const MainTabs: React.FC<{
-  user: User;
-  unreadCount: number;
-  onLogout: () => void;
+  onLogout: () => Promise<void>;
   rootNavigation: NativeStackNavigationProp<RootStackParamList>;
-}> = ({ user, unreadCount, onLogout, rootNavigation }) => {
+}> = ({ onLogout, rootNavigation }) => {
   const navigateToScreen = (screen: string, params?: any) => {
     const routeName = screenMap[screen as ScreenName];
-    if (routeName) {
-      rootNavigation.navigate(routeName, params);
-    }
+    if (routeName) rootNavigation.navigate(routeName, params);
   };
 
   return (
@@ -320,46 +304,51 @@ const MainTabs: React.FC<{
           height: 64,
           paddingBottom: 6,
         },
-        tabBarLabelStyle: {
-          fontSize: 11,
-        },
+        tabBarLabelStyle: { fontSize: 11 },
         tabBarIcon: ({ color, size }) => {
-          const icons: Record<
-            keyof MainTabParamList,
-            keyof typeof Ionicons.glyphMap
-          > = {
+          const icons: Record<keyof MainTabParamList, keyof typeof Ionicons.glyphMap> = {
             Home: "home-outline",
             Search: "search-outline",
             Notifications: "notifications-outline",
             Profile: "person-outline",
           };
-          const iconName = icons[route.name as keyof MainTabParamList];
-          return <Ionicons name={iconName} size={size} color={color} />;
+          return <Ionicons name={icons[route.name as keyof MainTabParamList]} size={size} color={color} />;
         },
       })}
     >
       <Tab.Screen name="Home">
-        {() => <HomeScreen user={user} navigate={navigateToScreen} />}
+        {() => <HomeScreen navigate={navigateToScreen} />}
       </Tab.Screen>
       <Tab.Screen name="Search">
         {() => <SearchScreen navigate={navigateToScreen} />}
       </Tab.Screen>
-      <Tab.Screen
-        name="Notifications"
-        options={{ tabBarBadge: unreadCount > 0 ? unreadCount : undefined }}
-      >
+      <Tab.Screen name="Notifications">
         {() => <NotificationsScreen />}
       </Tab.Screen>
       <Tab.Screen name="Profile">
-        {() => <ProfileScreen user={user} onLogout={onLogout} />}
+        {() => <ProfileScreen />}
       </Tab.Screen>
     </Tab.Navigator>
   );
 };
 
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+}
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
+    backgroundColor: "#FAFAFA",
+  },
+  loadingScreen: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
     backgroundColor: "#FAFAFA",
   },
   blockedScreen: {

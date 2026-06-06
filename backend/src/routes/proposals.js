@@ -4,6 +4,36 @@ const prisma = require('../prisma');
 const { authenticate, requireLecturer } = require('../middleware/auth');
 const { sendPush } = require('../services/push');
 
+// GET /api/proposals/pending — all pending proposals across lecturer's modules
+router.get('/pending', authenticate, requireLecturer, async (req, res) => {
+  try {
+    const modules = await prisma.module.findMany({
+      where: { lecturerId: req.user.id },
+      include: { notes: { select: { id: true } } },
+    });
+    const noteIds = modules.flatMap((m) => m.notes.map((n) => n.id));
+
+    const proposals = await prisma.editProposal.findMany({
+      where: { noteId: { in: noteIds }, status: 'pending' },
+      include: {
+        proposer: { select: { id: true, fullName: true } },
+        note: {
+          select: {
+            id: true,
+            title: true,
+            module: { select: { id: true, code: true, name: true } },
+          },
+        },
+      },
+      orderBy: [{ upvoteCount: 'desc' }, { createdAt: 'desc' }],
+    });
+
+    return res.json(proposals);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 // PATCH /api/proposals/:id/approve (Lecturer only)
 router.patch('/:id/approve', authenticate, requireLecturer, async (req, res) => {
   const proposalId = req.params.id;

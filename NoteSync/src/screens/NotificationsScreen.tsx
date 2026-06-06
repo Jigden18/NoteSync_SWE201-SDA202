@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,14 +7,26 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect } from "@react-navigation/native";
 import { C } from "../constants/colors";
 import { timeAgo } from "../utils/helpers";
-import { MOCK_NOTIFICATIONS, Notification } from "../data/mockData";
+import { apiFetch } from "../api/client";
 import { Header } from "../components/layout/Header";
+import { EmptyState } from "../components/ui/EmptyState";
+import { ListSkeleton } from "../components/ui/ListSkeleton";
 import { Ionicons } from "@expo/vector-icons";
-import { resolveNotificationRoute } from "../utils/notificationRouting";
 
-const iconMap: Record<Notification["type"], keyof typeof Ionicons.glyphMap> = {
+interface AppNotification {
+  id: string;
+  type: "proposal_submitted" | "proposal_approved" | "proposal_rejected" | "comment" | "locked";
+  title: string;
+  body: string;
+  noteId: string;
+  initialTab?: "notes" | "proposals" | "comments";
+  createdAt: string;
+}
+
+const iconMap: Record<AppNotification["type"], keyof typeof Ionicons.glyphMap> = {
   proposal_approved: "checkmark-circle",
   proposal_rejected: "close-circle",
   comment: "chatbubble-ellipses-outline",
@@ -22,7 +34,7 @@ const iconMap: Record<Notification["type"], keyof typeof Ionicons.glyphMap> = {
   proposal_submitted: "document-text-outline",
 };
 
-const iconColorMap: Record<Notification["type"], string> = {
+const iconColorMap: Record<AppNotification["type"], string> = {
   proposal_approved: C.success,
   proposal_rejected: C.danger,
   comment: C.accent,
@@ -31,25 +43,24 @@ const iconColorMap: Record<Notification["type"], string> = {
 };
 
 export const NotificationsScreen: React.FC = () => {
-  const [notifs, setNotifs] = useState<Notification[]>([...MOCK_NOTIFICATIONS]);
+  const [notifs, setNotifs] = useState<AppNotification[] | null>(null);
+  const [read, setRead] = useState<Set<string>>(new Set());
   const navigation = useNavigation<any>();
 
-  const markAll = () => {
-    setNotifs((ns) => ns.map((n) => ({ ...n, read: true })));
-  };
+  useFocusEffect(
+    useCallback(() => {
+      apiFetch<AppNotification[]>("/api/notifications")
+        .then(setNotifs)
+        .catch(() => setNotifs([]));
+    }, [])
+  );
 
-  const markRead = (id: string) => {
-    setNotifs((ns) => ns.map((n) => (n.id === id ? { ...n, read: true } : n)));
-  };
+  const markAll = () => setRead(new Set(notifs?.map((n) => n.id) ?? []));
 
-  const openNotification = (notification: Notification) => {
-    markRead(notification.id);
-    const route = resolveNotificationRoute(notification);
-    if (route) {
-      navigation.navigate("Note", {
-        id: route.noteId,
-        initialTab: route.initialTab,
-      });
+  const openNotif = (n: AppNotification) => {
+    setRead((prev) => new Set([...prev, n.id]));
+    if (n.noteId) {
+      navigation.navigate("Note", { id: n.noteId, initialTab: n.initialTab });
     }
   };
 
@@ -66,33 +77,40 @@ export const NotificationsScreen: React.FC = () => {
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.notifList}>
-          {notifs.map((n) => (
-            <TouchableOpacity
-              key={n.id}
-              onPress={() => openNotification(n)}
-              style={[styles.notifCard, !n.read && styles.unreadNotif]}
-            >
-              <View style={styles.notifIcon}>
-                <Ionicons
-                  name={iconMap[n.type] || "notifications-outline"}
-                  size={20}
-                  color={iconColorMap[n.type] || C.accent}
-                />
-              </View>
-              <View style={styles.notifContent}>
-                <View style={styles.notifHeader}>
-                  <Text
-                    style={[styles.notifTitle, !n.read && styles.unreadTitle]}
-                  >
-                    {n.title}
-                  </Text>
-                  {!n.read && <View style={styles.unreadDot} />}
-                </View>
-                <Text style={styles.notifBody}>{n.body}</Text>
-                <Text style={styles.notifTime}>{timeAgo(n.createdAt)}</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
+          {notifs === null ? (
+            <ListSkeleton count={4} />
+          ) : notifs.length === 0 ? (
+            <EmptyState iconName="notifications-outline" title="No notifications" sub="You're all caught up" />
+          ) : (
+            notifs.map((n) => {
+              const isRead = read.has(n.id);
+              return (
+                <TouchableOpacity
+                  key={n.id}
+                  onPress={() => openNotif(n)}
+                  style={[styles.notifCard, !isRead && styles.unreadNotif]}
+                >
+                  <View style={styles.notifIcon}>
+                    <Ionicons
+                      name={iconMap[n.type] ?? "notifications-outline"}
+                      size={20}
+                      color={iconColorMap[n.type] ?? C.accent}
+                    />
+                  </View>
+                  <View style={styles.notifContent}>
+                    <View style={styles.notifHeader}>
+                      <Text style={[styles.notifTitle, !isRead && styles.unreadTitle]}>
+                        {n.title}
+                      </Text>
+                      {!isRead && <View style={styles.unreadDot} />}
+                    </View>
+                    <Text style={styles.notifBody}>{n.body}</Text>
+                    <Text style={styles.notifTime}>{timeAgo(n.createdAt)}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
         </View>
       </ScrollView>
     </View>
@@ -100,73 +118,18 @@ export const NotificationsScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: C.bg,
-  },
-  markAllBtn: {
-    color: C.accent,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  content: {
-    flex: 1,
-  },
-  notifList: {
-    padding: 12,
-    gap: 8,
-  },
-  notifCard: {
-    flexDirection: "row",
-    gap: 10,
-    alignItems: "flex-start",
-    backgroundColor: C.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: C.border,
-    padding: 14,
-  },
-  unreadNotif: {
-    borderLeftWidth: 3,
-    borderLeftColor: C.accent,
-    backgroundColor: C.surface,
-  },
-  notifIcon: {
-    flexShrink: 0,
-  },
-  notifIconText: {
-    fontSize: 20,
-  },
-  notifContent: {
-    flex: 1,
-  },
-  notifHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  notifTitle: {
-    fontSize: 14,
-    color: C.textPrimary,
-  },
-  unreadTitle: {
-    fontWeight: "600",
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: C.accent,
-  },
-  notifBody: {
-    fontSize: 13,
-    color: C.textSecondary,
-    lineHeight: 20,
-    marginBottom: 4,
-  },
-  notifTime: {
-    fontSize: 11,
-    color: C.textMuted,
-  },
+  container: { flex: 1, backgroundColor: C.bg },
+  markAllBtn: { color: C.accent, fontSize: 13, fontWeight: "600" },
+  content: { flex: 1 },
+  notifList: { padding: 12, gap: 8 },
+  notifCard: { flexDirection: "row", gap: 10, alignItems: "flex-start", backgroundColor: C.surface, borderRadius: 12, borderWidth: 1, borderColor: C.border, padding: 14 },
+  unreadNotif: { borderLeftWidth: 3, borderLeftColor: C.accent },
+  notifIcon: { flexShrink: 0 },
+  notifContent: { flex: 1 },
+  notifHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
+  notifTitle: { fontSize: 14, color: C.textPrimary, flex: 1 },
+  unreadTitle: { fontWeight: "600" },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.accent, marginLeft: 8 },
+  notifBody: { fontSize: 13, color: C.textSecondary, lineHeight: 20, marginBottom: 4 },
+  notifTime: { fontSize: 11, color: C.textMuted },
 });

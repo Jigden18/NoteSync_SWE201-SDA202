@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
-const { authenticate, requireLecturer } = require('../middleware/auth');
+const { authenticate, requireLecturer, verifyEnrolment } = require('../middleware/auth');
 
 // Create module (lecturer only)
 router.post('/', authenticate, requireLecturer, async (req, res) => {
@@ -33,14 +33,35 @@ router.get('/', authenticate, async (req, res) => {
     if (req.user.role === 'lecturer') {
       const modules = await prisma.module.findMany({
         where: { lecturerId: req.user.id },
+        include: {
+          lecturer: { select: { fullName: true } },
+          _count: { select: { enrolments: true, notes: true } },
+        },
       });
-      return res.json(modules);
+      return res.json(modules.map((m) => ({
+        ...m,
+        lecturerName: m.lecturer.fullName,
+        studentCount: m._count.enrolments,
+        lectureCount: m._count.notes,
+      })));
     } else {
       const enrolments = await prisma.enrolment.findMany({
         where: { studentId: req.user.id },
-        include: { module: true },
+        include: {
+          module: {
+            include: {
+              lecturer: { select: { fullName: true } },
+              _count: { select: { enrolments: true, notes: true } },
+            },
+          },
+        },
       });
-      return res.json(enrolments.map((e) => e.module));
+      return res.json(enrolments.map((e) => ({
+        ...e.module,
+        lecturerName: e.module.lecturer.fullName,
+        studentCount: e.module._count.enrolments,
+        lectureCount: e.module._count.notes,
+      })));
     }
   } catch (error) {
     return res.status(500).json({ error: error.message });
@@ -167,8 +188,27 @@ router.get('/:id/notes', authenticate, async (req, res) => {
     const notes = await prisma.lectureNote.findMany({
       where: { moduleId: id },
       orderBy: { lectureDate: 'desc' },
+      include: {
+        versions: { select: { id: true, versionNumber: true } },
+        _count: { select: { proposals: { where: { status: 'pending' } } } },
+      },
     });
-    return res.json(notes);
+
+    return res.json(notes.map((n) => {
+      const currentVersion = n.currentVersionId
+        ? n.versions.find((v) => v.id === n.currentVersionId)
+        : null;
+      return {
+        id: n.id,
+        moduleId: n.moduleId,
+        title: n.title,
+        lectureDate: n.lectureDate,
+        currentVersionId: n.currentVersionId,
+        currentVersionNumber: currentVersion ? currentVersion.versionNumber : 1,
+        isLocked: n.isLocked,
+        pendingProposalCount: n._count.proposals,
+      };
+    }));
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }

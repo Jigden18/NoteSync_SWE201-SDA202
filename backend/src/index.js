@@ -26,6 +26,7 @@ app.use('/api/annotations', require('./routes/annotations'));
 app.use('/api/images', require('./routes/images'));
 app.use('/api/pdfs', require('./routes/pdfs'));
 app.use('/api/search', require('./routes/search'));
+app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api', require('./routes/export'));
 
 // Setup socket room handlers
