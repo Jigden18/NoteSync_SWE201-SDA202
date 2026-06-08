@@ -227,7 +227,7 @@ router.get('/:id/search', authenticate, async (req, res) => {
           plainto_tsquery('english', ${q}), 'MaxWords=20,MinWords=10') AS snippet
       FROM note_versions nv
       JOIN lecture_notes ln ON ln.current_version_id = nv.id
-      WHERE nv.tsv @@ plainto_tsquery('english', ${q}) AND ln.module_id = ${id}::uuid
+      WHERE to_tsvector('english', regexp_replace(nv.content,'<[^>]+>',' ','g')) @@ plainto_tsquery('english', ${q}) AND ln.module_id = ${id}::uuid
       ORDER BY ln.lecture_date DESC
     `;
     return res.json(results);

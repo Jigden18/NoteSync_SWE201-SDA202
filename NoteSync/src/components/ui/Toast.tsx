@@ -67,8 +67,7 @@ const styles = StyleSheet.create({
   toast: {
     position: "absolute",
     bottom: 90,
-    left: "50%",
-    transform: [{ translateX: "-50%" }],
+    alignSelf: "center",
     zIndex: 999,
     backgroundColor: C.textPrimary,
     paddingHorizontal: 20,

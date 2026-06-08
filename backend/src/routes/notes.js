@@ -204,7 +204,7 @@ router.patch('/:id', authenticate, requireLecturer, async (req, res) => {
 // POST /api/notes/:id/proposals
 router.post('/:id/proposals', authenticate, async (req, res) => {
   const noteId = req.params.id;
-  const { baseVersionId, proposedContent, summary } = req.body;
+  const { baseVersionId, proposedContent, summary, originalText, suggestedText } = req.body;
   if (!baseVersionId || !proposedContent || !summary) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
@@ -231,6 +231,8 @@ router.post('/:id/proposals', authenticate, async (req, res) => {
         summary,
         status: 'pending',
         isInline: false,
+        originalText: originalText || null,
+        suggestedText: suggestedText || null,
       },
       include: { proposer: { select: { id: true, fullName: true } } },
     });
@@ -332,10 +334,26 @@ router.get('/:id/proposals', authenticate, async (req, res) => {
   try {
     const proposals = await prisma.editProposal.findMany({
       where: { noteId },
-      include: { proposer: { select: { id: true, fullName: true } } },
+      include: {
+        proposer: { select: { id: true, fullName: true } },
+        baseVersion: { select: { content: true } },
+        upvotes: {
+          where: { studentId: req.user.id },
+          select: { studentId: true },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
-    return res.json(proposals);
+    const proposalsWithUpvotes = proposals.map((p) => {
+      const hasUpvoted = p.upvotes.length > 0;
+      delete p.upvotes;
+      const originalText = p.originalText ?? p.baseVersion?.content ?? "";
+      const suggestedText = p.suggestedText ?? p.proposedContent ?? "";
+      const baseVersion = p.baseVersion;
+      delete p.baseVersion;
+      return { ...p, hasUpvoted, originalText, suggestedText };
+    });
+    return res.json(proposalsWithUpvotes);
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
@@ -347,10 +365,26 @@ router.get('/:id/proposals/pending', authenticate, async (req, res) => {
   try {
     const proposals = await prisma.editProposal.findMany({
       where: { noteId, status: 'pending' },
-      include: { proposer: { select: { id: true, fullName: true } } },
+      include: {
+        proposer: { select: { id: true, fullName: true } },
+        baseVersion: { select: { content: true } },
+        upvotes: {
+          where: { studentId: req.user.id },
+          select: { studentId: true },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
-    return res.json(proposals);
+    const proposalsWithUpvotes = proposals.map((p) => {
+      const hasUpvoted = p.upvotes.length > 0;
+      delete p.upvotes;
+      const originalText = p.originalText ?? p.baseVersion?.content ?? "";
+      const suggestedText = p.suggestedText ?? p.proposedContent ?? "";
+      const baseVersion = p.baseVersion;
+      delete p.baseVersion;
+      return { ...p, hasUpvoted, originalText, suggestedText };
+    });
+    return res.json(proposalsWithUpvotes);
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }

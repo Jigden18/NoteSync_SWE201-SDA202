@@ -3,11 +3,54 @@ const router = express.Router();
 const prisma = require('../prisma');
 const { authenticate } = require('../middleware/auth');
 const cloudinary = require('cloudinary').v2;
+const multer = require('multer');
+const upload = multer();
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// POST /api/images/upload
+router.post('/upload', authenticate, upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  const { noteId, proposalId, caption } = req.body;
+  if (!noteId) return res.status(400).json({ error: 'noteId is required' });
+
+  try {
+    const uploadStream = (buffer, options) => {
+      return new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(options, (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        });
+        stream.end(buffer);
+      });
+    };
+
+    const options = {
+      resource_type: 'image',
+      folder: 'notesync_images',
+    };
+    const uploadResult = await uploadStream(req.file.buffer, options);
+
+    const image = await prisma.noteImage.create({
+      data: {
+        noteId,
+        proposalId: proposalId || null,
+        cloudinaryPublicId: uploadResult.public_id,
+        publicUrl: uploadResult.secure_url,
+        caption: caption || null,
+        uploadedBy: req.user.id,
+        isOrphaned: false,
+      },
+    });
+
+    return res.json(image);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
 });
 
 // POST /api/images/register

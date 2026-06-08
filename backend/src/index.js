@@ -36,7 +36,9 @@ require('./socket')(io);
 require('./services/cleanup');
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+const HOST = process.env.HOST || '0.0.0.0';
+server.listen(PORT, HOST, () => {
   // Safe console.log allowed for cron/server startup information
-  console.log(`NoteSync Server running on port ${PORT}`);
+  console.log(`NoteSync Server running at http://${HOST}:${PORT}`);
 });
+

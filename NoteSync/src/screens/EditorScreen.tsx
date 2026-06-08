@@ -7,12 +7,13 @@ import {
   TouchableOpacity,
   TextInput,
   Clipboard,
+  Platform,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { C } from "../constants/colors";
 import { useAuth } from "../contexts/AuthContext";
 import { useNoteData } from "../contexts/NoteDataContext";
-import { apiFetch } from "../api/client";
+import { apiFetch, API_URL, getStoredToken } from "../api/client";
 import { Header } from "../components/layout/Header";
 import { Btn } from "../components/ui/Btn";
 import { Input } from "../components/ui/Input";
@@ -86,6 +87,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({ noteId, navigate, on
   const [pasteSheet, setPasteSheet] = useState(false);
   const [pasteImageUrl, setPasteImageUrl] = useState("");
   const [toast, setToast] = useState("");
+  const [uploadedImageIds, setUploadedImageIds] = useState<string[]>([]);
 
   useEffect(() => {
     apiFetch<any>(`/api/notes/${noteId}`).then((data) => {
@@ -105,7 +107,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({ noteId, navigate, on
 
     try {
       const endpoint = draft.isInline ? `/api/notes/${noteId}/proposals/inline` : `/api/notes/${noteId}/proposals`;
-      await apiFetch(endpoint, {
+      const proposalData = await apiFetch<any>(endpoint, {
         method: "POST",
         body: JSON.stringify({
           baseVersionId: note.currentVersionId,
@@ -115,6 +117,19 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({ noteId, navigate, on
           suggestedText: draft.suggestedText,
         }),
       });
+
+      // Link uploaded images to proposal
+      for (const imgId of uploadedImageIds) {
+        try {
+          await apiFetch(`/api/images/${imgId}/link`, {
+            method: "PATCH",
+            body: JSON.stringify({ proposalId: proposalData.id }),
+          });
+        } catch (linkErr) {
+          // Silently continue
+        }
+      }
+
       setProposalToast({ noteId, message: "Proposal submitted successfully." });
       onBack();
     } catch (e: any) {
@@ -141,7 +156,49 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({ noteId, navigate, on
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) { setToast("Gallery access is required."); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
-    if (!result.canceled && result.assets?.[0]?.uri) insertAtCursor(`![Image](${result.assets[0].uri})`);
+    if (!result.canceled && result.assets?.[0]?.uri) {
+      const localUri = result.assets[0].uri;
+      try {
+        setToast("Uploading image...");
+        const formData = new FormData();
+        const uriParts = localUri.split('.');
+        const fileType = uriParts[uriParts.length - 1] || 'jpg';
+        
+        if (Platform.OS === "web") {
+          const response = await fetch(localUri);
+          const blob = await response.blob();
+          formData.append("file", blob, `photo.${fileType}`);
+        } else {
+          formData.append("file", {
+            uri: localUri,
+            name: `photo.${fileType}`,
+            type: `image/${fileType}`,
+          } as any);
+        }
+        formData.append("noteId", noteId);
+        
+        const token = await getStoredToken();
+        const headers: Record<string, string> = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
+        const uploadRes = await fetch(`${API_URL}/api/images/upload`, {
+          method: "POST",
+          body: formData,
+          headers,
+        });
+
+        const uploadData = await uploadRes.json();
+        if (!uploadRes.ok) {
+          throw new Error(uploadData.error || "Failed to upload image");
+        }
+
+        setUploadedImageIds((prev) => [...prev, uploadData.id]);
+        insertAtCursor(`![Image](${uploadData.publicUrl})`);
+        setToast("Image uploaded and inserted!");
+      } catch (e: any) {
+        setToast(e.message || "Failed to upload image");
+      }
+    }
   };
 
   const handlePasteImage = async () => {

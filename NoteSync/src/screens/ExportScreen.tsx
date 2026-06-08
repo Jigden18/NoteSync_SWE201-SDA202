@@ -5,11 +5,14 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Platform,
 } from "react-native";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
 import { C } from "../constants/colors";
 import { fmtDate } from "../utils/helpers";
 import { useAuth } from "../contexts/AuthContext";
-import { apiFetch } from "../api/client";
+import { apiFetch, getStoredToken, API_URL } from "../api/client";
 import { Header } from "../components/layout/Header";
 import { Btn } from "../components/ui/Btn";
 import { Toast } from "../components/ui/Toast";
@@ -52,13 +55,93 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({ noteId, onBack }) =>
     }).catch(() => {});
   }, [noteId]);
 
-  const handleExport = async () => {
+  const handleExport = async (isCompilation: boolean) => {
+    if (!note) return;
     setExporting(true);
-    setTimeout(() => {
+    try {
+      let htmlContent = "";
+      let pdfName = "";
+
+      if (isCompilation) {
+        const selectedNoteIds = Object.keys(selected).filter((id) => selected[id]);
+        if (selectedNoteIds.length === 0) {
+          setToast("Select at least one note to compile.");
+          setExporting(false);
+          return;
+        }
+        const res = await apiFetch<{ content: string }>(`/api/modules/${note.moduleId}/compile`, {
+          method: "POST",
+          body: JSON.stringify({ noteIds: selectedNoteIds }),
+        });
+        htmlContent = res.content;
+        pdfName = `${note.title.replace(/\s+/g, "_")}_Compiled.pdf`;
+      } else {
+        const res = await apiFetch<{ title: string; content: string }>(`/api/notes/${noteId}/export`);
+        htmlContent = res.content;
+        pdfName = `${res.title.replace(/\s+/g, "_")}.pdf`;
+      }
+
+      // Generate local PDF file from HTML content
+      const { uri } = await Print.printToFileAsync({ html: htmlContent });
+
+      // Check if sharing is available
+      const isSharingAvailable = await Sharing.isAvailableAsync();
+
+      // Upload generated PDF to backend
+      const formData = new FormData();
+      if (Platform.OS === "web") {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        formData.append("file", blob, pdfName);
+      } else {
+        formData.append("file", {
+          uri: uri,
+          name: pdfName,
+          type: "application/pdf",
+        } as any);
+      }
+      if (!isCompilation) {
+        formData.append("noteId", noteId);
+      }
+      formData.append("moduleId", note.moduleId);
+      formData.append("isCompilation", isCompilation ? "true" : "false");
+
+      const token = await getStoredToken();
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const uploadRes = await fetch(`${API_URL}/api/pdfs/upload`, {
+        method: "POST",
+        body: formData,
+        headers,
+      });
+
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok) {
+        throw new Error(uploadData.error || "Failed to save PDF on server");
+      }
+
+      // Open sharing dialog or download file depending on platform
+      if (isSharingAvailable) {
+        await Sharing.shareAsync(uri);
+        setToast("PDF exported & ready to share!");
+      } else if (Platform.OS === "web") {
+        const link = document.createElement("a");
+        link.href = uri;
+        link.download = pdfName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setToast("PDF exported & downloaded!");
+      } else {
+        setToast("PDF exported! (Sharing not supported on this device)");
+      }
+    } catch (error: any) {
+      setToast(error.message || "Failed to export PDF");
+    } finally {
       setExporting(false);
-      setToast("PDF exported & ready to share!");
       setTimeout(() => setToast(""), 3000);
-    }, 1200);
+    }
   };
 
   const content = note?.currentVersion?.content ?? "";
@@ -83,7 +166,7 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({ noteId, onBack }) =>
           )}
         </View>
 
-        <Btn onPress={handleExport} full disabled={exporting || !note}>
+        <Btn onPress={() => handleExport(false)} full disabled={exporting || !note}>
           {exporting ? "Generating PDF…" : "Export Single Note"}
         </Btn>
 
@@ -112,7 +195,7 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({ noteId, onBack }) =>
             <Btn
               full
               variant="secondary"
-              onPress={handleExport}
+              onPress={() => handleExport(true)}
               disabled={exporting || !Object.values(selected).some(Boolean)}
             >
               Compile & Export Module PDF
@@ -142,3 +225,4 @@ const styles = StyleSheet.create({
   checkboxTitle: { fontSize: 14, fontWeight: "500", color: C.textPrimary },
   checkboxSubtitle: { fontSize: 12, color: C.textMuted },
 });
+

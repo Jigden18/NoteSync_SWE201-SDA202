@@ -17,6 +17,7 @@ router.get('/pending', authenticate, requireLecturer, async (req, res) => {
       where: { noteId: { in: noteIds }, status: 'pending' },
       include: {
         proposer: { select: { id: true, fullName: true } },
+        baseVersion: { select: { content: true } },
         note: {
           select: {
             id: true,
@@ -28,7 +29,15 @@ router.get('/pending', authenticate, requireLecturer, async (req, res) => {
       orderBy: [{ upvoteCount: 'desc' }, { createdAt: 'desc' }],
     });
 
-    return res.json(proposals);
+    const formattedProposals = proposals.map((p) => {
+      const originalText = p.originalText ?? p.baseVersion?.content ?? "";
+      const suggestedText = p.suggestedText ?? p.proposedContent ?? "";
+      const baseVersion = p.baseVersion;
+      delete p.baseVersion;
+      return { ...p, originalText, suggestedText };
+    });
+
+    return res.json(formattedProposals);
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
