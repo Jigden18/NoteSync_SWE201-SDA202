@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { StyleSheet, View, Text, ActivityIndicator } from "react-native";
+import { StyleSheet, View, Text, ActivityIndicator, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { NavigationContainer } from "@react-navigation/native";
@@ -29,6 +29,8 @@ import { NotificationsScreen } from "./screens/NotificationsScreen";
 import { ProfileScreen } from "./screens/ProfileScreen";
 import { ProposalReviewQueueScreen } from "./screens/ProposalReviewQueueScreen";
 import { C } from "./constants/colors";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { apiFetch } from "./api/client";
 import {
   canRegisterForRemotePushNotifications,
   registerForPushNotificationsAsync,
@@ -94,6 +96,19 @@ function AppContent() {
   useEffect(() => {
     let isActive = true;
 
+    // Request permission and set up Android channel unconditionally
+    // so local notifications (trigger: null) show as banners on Expo Go too
+    (async () => {
+      if (Platform.OS === "android") {
+        await Notifications.setNotificationChannelAsync("default", {
+          name: "NoteSync",
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+        });
+      }
+      await Notifications.requestPermissionsAsync();
+    })();
+
     if (canRegisterForRemotePushNotifications()) {
       registerForPushNotificationsAsync().then((token) => {
         if (isActive && token && user) {
@@ -133,6 +148,32 @@ function AppContent() {
       isActive = false;
       responseSubscription.remove();
     };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const SEEN_KEY = "seen_notif_ids";
+
+    const poll = async () => {
+      try {
+        const data = await apiFetch<{ id: string; title: string; body: string; noteId: string; initialTab?: string }[]>("/api/notifications");
+        const raw = await AsyncStorage.getItem(SEEN_KEY);
+        const seen = new Set<string>(raw ? JSON.parse(raw) : []);
+        const fresh = data.filter((n) => !seen.has(n.id));
+        for (const n of fresh) {
+          await Notifications.scheduleNotificationAsync({
+            content: { title: n.title, body: n.body, data: { noteId: n.noteId, initialTab: n.initialTab } },
+            trigger: null,
+          });
+          seen.add(n.id);
+        }
+        if (fresh.length > 0) await AsyncStorage.setItem(SEEN_KEY, JSON.stringify([...seen]));
+      } catch {}
+    };
+
+    poll();
+    const interval = setInterval(poll, 30000);
+    return () => clearInterval(interval);
   }, [user]);
 
   if (loading) {
